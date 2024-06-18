@@ -1,3 +1,5 @@
+# THIS FORK OF THE BADGE-2024-SOFTWARE IS BEING USED TO PROVIDE A TEST ENVIRONMENT FOR THE BADGEBOT APP
+
 # Tildagon Firmware
 
 Web flasher is available @ https://emfcamp.github.io/badge-2024-software/
