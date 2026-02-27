@@ -1,3 +1,11 @@
 [submodule "micropython"]
 	path = micropython
 	url = https://github.com/micropython/micropython.git
+[submodule "apps/BadgeBot"]
+	path = apps/BadgeBot
+	url = https://github.com/TeamRobotmad/BadgeBot
+	branch = Snsors-testing
+[submodule "sim/apps/BadgeBot"]
+	path = sim/apps/BadgeBot
+	url = https://github.com/TeamRobotmad/BadgeBot
+	branch = Snsors-testing
