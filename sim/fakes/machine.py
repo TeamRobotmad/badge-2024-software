@@ -43,6 +43,9 @@ class I2C:
     def writeto_mem(self, *args, **kwargs):
         return 0
 
+    def readfrom(self, *args, **kwargs):
+        return b'\x00' * 32
+
     def readfrom_mem(self, *args, **kwargs):
         return b''
 

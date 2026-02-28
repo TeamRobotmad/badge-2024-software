@@ -144,7 +144,7 @@ def mkstat(orig_stat):
 os.stat = mkstat(os.stat)
 
 
-sys.print_exception = lambda x: print(traceback.format_exc())
+sys.print_exception = lambda x, f=None: print(traceback.format_exc(), file=f)
 
 
 def sim_main():
