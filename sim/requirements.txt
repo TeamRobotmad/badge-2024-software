@@ -1,5 +1,4 @@
-pygame
-requests
-# pymad
-wasmer
+pygame==2.6.1
+requests==2.32.3
+wasmtime==39.0.0
 wasmer-compiler-cranelift

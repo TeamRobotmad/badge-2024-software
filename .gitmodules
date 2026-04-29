@@ -4,3 +4,8 @@
 [submodule "sim/apps/BadgeBot"]
 	path = sim/apps/BadgeBot
 	url = https://github.com/TeamRobotmad/BadgeBot.git
+[submodule "sim/apps/HexManager"]
+	path = sim/apps/HexManager
+	url = https://github.com/TeamRobotmad/HexManager.git
+	branch = main
+	

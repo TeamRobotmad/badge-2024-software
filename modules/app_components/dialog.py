@@ -2,6 +2,7 @@ import asyncio
 
 import display
 from events.input import BUTTON_TYPES, ButtonDownEvent
+from events.keyboard import KEYBOARD_BUTTONS
 from system.eventbus import eventbus
 
 from .tokens import button_labels, label_font_size, set_color
@@ -95,6 +96,8 @@ class TextDialog:
         self._current_alphabet = LOWERCASE_ALPHABET
         self._keys = []
         self._caps = False
+        self._sym = False
+        self._shift = False
         self._layer = 0
         self._result = None
         eventbus.on(ButtonDownEvent, self._handle_buttondown, self.app)
@@ -161,7 +164,7 @@ class TextDialog:
 
     def draw(self, ctx):
         ctx.save()
-        ctx.rgba(0, 0, 0, 0.5)
+        ctx.rgba(0, 0, 0, 0.8)
         display.hexagon(ctx, 0, 0, 120)
 
         self.draw_message(ctx)
@@ -180,6 +183,9 @@ class TextDialog:
 
     def _handle_buttondown(self, event: ButtonDownEvent):
         key = -1
+        final = None
+
+        kbd_button = event.button.find_parent_in_group("Keyboard")
 
         if BUTTON_TYPES["UP"] in event.button:
             key = 0
@@ -194,12 +200,39 @@ class TextDialog:
         elif BUTTON_TYPES["CONFIRM"] in event.button:
             key = 2
 
+        elif kbd_button is not None:
+            if KEYBOARD_BUTTONS["SHIFT"] in event.button:
+                key = -2
+                final = SPECIAL_KEY_SHIFT
+            elif KEYBOARD_BUTTONS["BACKSPACE"] in event.button:
+                key = -2
+                final = SPECIAL_KEY_BACKSPACE
+            elif KEYBOARD_BUTTONS["SPACE"] in event.button:
+                key = -2
+                final = SPECIAL_KEY_SPACE
+            elif kbd_button.name in UPPERCASE_ALPHABET:
+                # This is a letter
+                if self._current_alphabet == UPPERCASE_ALPHABET:
+                    key = -2
+                    final = kbd_button.name
+                else:
+                    key = -2
+                    final = kbd_button.name.lower()
+            elif kbd_button.name in SYMBOL_ALPHABET:
+                key = -2
+                final = kbd_button.name
+
         if key == -1:
             return
 
-        selected = self._keys[key]
-        if len(selected) == 1:
-            selected = self._keys[key][0]
+        if key >= 0:
+            selected = self._keys[key]
+            if len(selected) == 1:
+                final = self._keys[key][0]
+
+        if final:
+            selected = final
+            final = None
 
             if selected == SPECIAL_KEY_SPACE:
                 selected = " "
@@ -222,16 +255,33 @@ class TextDialog:
                 self._layer = -1
             elif selected == SPECIAL_KEY_SYMBOL:
                 self._layer = 0
-                self._current_alphabet = SYMBOL_ALPHABET
-            elif selected == SPECIAL_KEY_SHIFT or selected == SPECIAL_KEY_CAPS:
+                if self._sym:
+                    self._current_alphabet = LOWERCASE_ALPHABET
+                    self._sym = False
+                    self._caps = False
+                else:
+                    self._current_alphabet = SYMBOL_ALPHABET
+                    self._sym = True
+            elif selected == SPECIAL_KEY_SHIFT:
                 self._layer = 0
-                self._current_alphabet = UPPERCASE_ALPHABET
-                if selected == SPECIAL_KEY_CAPS:
-                    self._caps = True
+                self._shift = not self._shift
+                if self._shift:
+                    self._current_alphabet = UPPERCASE_ALPHABET
+                else:
+                    self._current_alphabet = LOWERCASE_ALPHABET
+            elif selected == SPECIAL_KEY_CAPS:
+                self._layer = 0
+                self._caps = not self._caps
+                if self._caps:
+                    self._current_alphabet = UPPERCASE_ALPHABET
+                else:
+                    self._current_alphabet = LOWERCASE_ALPHABET
             else:
                 self.text += selected
+                if self._shift:
+                    self._shift = False
+                    self._current_alphabet = LOWERCASE_ALPHABET
                 self._layer = 0
-
                 if self._caps:
                     self._current_alphabet = UPPERCASE_ALPHABET
                 else:

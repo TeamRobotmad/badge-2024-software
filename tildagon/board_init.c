@@ -1,6 +1,7 @@
 #include "st3m_imu.h"
 
 #include "tildagon_power.h"
+#include "tildagon_imu.h"
 
 // This is the default startup handler for ESP32, does VFS and stuff
 void boardctrl_startup(void);
@@ -13,16 +14,21 @@ void tildagon_usb_init(void);
 // (some #define not set correctly?)
 void tildagon_i2c_init(void);
 
-void tildagon_startup(void) {
+void tildagon_pins_init(void);
+
+void tildagon_startup(void) 
+{
     // call the micropy default startup - does VFS init on ESP32
     boardctrl_startup();
     
     tildagon_i2c_init();
+    
+    tildagon_pins_init();
+    
     tildagon_power_init();
 	
     tildagon_usb_init();
 
-    
-    st3m_imu_init();
+    tildagon_imu_init();
 
 }

@@ -61,6 +61,8 @@ typedef enum {
     st3m_gfx_32bpp = 32,
 } st3m_gfx_mode;
 
+void st3m_gfx_fps_update (void);
+
 // sets the system graphics mode, this is the mode you get to
 // when calling st3m_gfx_set_mode(st3m_gfx_default);
 void st3m_gfx_set_default_mode(st3m_gfx_mode mode);
@@ -101,7 +103,7 @@ float st3m_gfx_fps(void);
 // with ctx_end_frame()
 void st3m_gfx_end_frame(Ctx *ctx);
 
-// Initialize the gfx subsystem of st3m, includng the rasterization and
+// Initialize the gfx subsystem of st3m, including the rasterization and
 // crtx/blitter pipeline.
 void st3m_gfx_init(void);
 
@@ -114,7 +116,7 @@ uint8_t st3m_gfx_pipe_available(void);
 // Flush any in-flight pipelined work, resetting the free ctx/framebuffer queues
 // to their initial state. This should be called if there has been any drawlist
 // ctx dropped (ie. drawctx_free_get was called but then drawctx_pipe_put
-// wasn't, for exaple if Micropython restarted).
+// wasn't, for example if Micropython restarted).
 //
 // This causes a graphical disturbance and shouldn't be called during normal
 // operation. wait_ms is waited for drawlits to clear.

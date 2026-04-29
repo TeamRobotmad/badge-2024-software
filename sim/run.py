@@ -1,26 +1,23 @@
 #!/usr/bin/env python3
 
+import argparse
+import builtins
 import importlib
 import importlib.abc
 import importlib.machinery
-from importlib.machinery import PathFinder, BuiltinImporter
 import importlib.util
 import os
 import sys
-import builtins
-import argparse
 import traceback
-import os
-
+from importlib.machinery import BuiltinImporter, PathFinder
 
 projectpath = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
-import random
-import pygame
 import cmath
 import gzip
-import wasmer
-import wasmer_compiler_cranelift
+import random
+
+import pygame
 
 try:
     import config
@@ -84,6 +81,9 @@ importlib.invalidate_caches()
 sys.modules["time"] = time
 
 simpath = "/tmp/sim"
+if sys.platform == "win32":
+    import tempfile
+    simpath = os.path.join(tempfile.gettempdir(), "sim")
 print(f"Using {simpath} as /flash mount")
 try:
     os.mkdir(simpath)
@@ -129,6 +129,13 @@ def _mkmock2(fun):
 os.listdir = _mkmock(os.listdir)
 os.rename = _mkmock2(os.rename)
 os.stat = _mkmock(os.stat)
+if not hasattr(os, "statvfs"):
+    # Windows does not have os.statvfs; provide a stub returning fake disk stats
+    # Returns a tuple matching statvfs_result fields:
+    # (f_bsize, f_frsize, f_blocks, f_bfree, f_bavail, f_files, f_ffree, f_favail, f_flag, f_namemax)
+    def _statvfs_stub(path):
+        return (4096, 4096, 1048576, 524288, 524288, 0, 0, 0, 0, 255)
+    os.statvfs = _statvfs_stub
 os.statvfs = _mkmock(os.statvfs)
 os.mkdir = _mkmock(os.mkdir)
 os.rmdir = _mkmock(os.rmdir)
@@ -146,7 +153,22 @@ def mkstat(orig_stat):
 os.stat = mkstat(os.stat)
 
 
-sys.print_exception = lambda x: print(traceback.format_exc())
+sys.print_exception = lambda exc, stream=None: print(traceback.format_exc(), file=stream)
+
+
+def replace_launcher(module_name: str, class_name: str):
+    try:
+        app_module = importlib.import_module(module_name)
+    except ImportError:
+        raise Exception(f"Module '{module_name}' not found.")
+
+    try:
+        app_class = getattr(app_module, class_name)
+    except AttributeError:
+        raise Exception(f"Class '{class_name}' not found in module '{module_name}'.")
+
+    import system.launcher.app
+    system.launcher.app.Launcher = app_class
 
 
 def sim_main():
@@ -155,13 +177,13 @@ def sim_main():
         "--screenshot",
         action="store_true",
         default=False,
-        help="Generate a flow3r.png screenshot.",
+        help="Generate a screenshot.",
     )
     parser.add_argument(
         "override_app",
         nargs="?",
-        help="Bundle to start instead of the main menu. "
-        + "This is the `app.name` from flow3r.toml.",
+        help="App to start instead of the main launcher. "
+        + "This is in the format 'module.class', for example 'example.ExampleApp'.",
     )
     args = parser.parse_args()
 
@@ -169,9 +191,17 @@ def sim_main():
 
     _sim.SCREENSHOT = args.screenshot
 
-    #if args.override_app is not None:
-    #    import st3m.run
-    #    st3m.run.override_main_app = args.override_app
+    if args.override_app is not None:
+        parts = args.override_app.split(".")
+        if len(parts) != 2:
+            print("Error: override_app argument must be in the format `module.class`")
+            sys.exit(1)
+
+        try:
+            replace_launcher(parts[0], parts[1])
+        except Exception as ex:
+            print(f"Error: {ex}")
+            sys.exit(1)
 
     import main
 

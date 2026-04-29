@@ -11,15 +11,24 @@ and the release process.
 import subprocess
 import sys
 import os
+import re
 
 
 def get_git_based_version():
     root = os.environ.get('GITHUB_WORKSPACE', '/firmware')
     os.chdir(root)
-    return subprocess.check_output(
+    version = subprocess.check_output(
         ["git", "describe", "--tags", "--always"]
     ).decode().strip()
-
+    commit_hash = subprocess.check_output(
+        ["git", "describe", "--always"]
+    ).decode().strip()
+    if version.endswith(commit_hash):
+        build_info = re.compile(f"\-(\d+)\-(.*?{re.escape(commit_hash)})").findall(version)
+        if build_info:
+            ahead, commit_hash = build_info[0]
+            version = version.replace(f"-{ahead}-{commit_hash}", f"+{ahead}.{commit_hash}", 1)
+    return version
 
 fmt = None
 if len(sys.argv) > 1:

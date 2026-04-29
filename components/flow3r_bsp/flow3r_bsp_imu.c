@@ -23,17 +23,19 @@ static const char *TAG = "flow3r-imu";
 static void bmi2_error_codes_print_result(int8_t rslt);
 static int8_t set_accel_config(flow3r_bsp_imu_t *imu);
 static int8_t set_gyro_config(flow3r_bsp_imu_t *imu);
+static int8_t set_step_counter_config(flow3r_bsp_imu_t *imu);
 static float lsb_to_mps(int16_t val, float g_range, uint8_t bit_width);
 static float lsb_to_dps(int16_t val, float dps, uint8_t bit_width);
 
 static struct bmi2_sens_data _bmi_sens_data;
+static struct bmi2_feat_sensor_data _bmi_feat_data = {.type = BMI2_STEP_COUNTER};
 
 static tildagon_mux_i2c_obj_t* mux;
 
 #define READ ( MP_MACHINE_I2C_FLAG_WRITE1 | MP_MACHINE_I2C_FLAG_READ | MP_MACHINE_I2C_FLAG_STOP )
 #define WRITE MP_MACHINE_I2C_FLAG_STOP
 
-static BMI2_INTF_RETURN_TYPE bmi2_i2c_read(uint8_t reg_addr, uint8_t *reg_data,
+BMI2_INTF_RETURN_TYPE bmi2_i2c_read(uint8_t reg_addr, uint8_t *reg_data,
                                            uint32_t len, void *intf_ptr) {
     flow3r_bsp_imu_t *imu = (flow3r_bsp_imu_t *)intf_ptr;
 
@@ -53,7 +55,7 @@ static BMI2_INTF_RETURN_TYPE bmi2_i2c_read(uint8_t reg_addr, uint8_t *reg_data,
     return BMI2_OK;
 }
 
-static BMI2_INTF_RETURN_TYPE bmi2_i2c_write(uint8_t reg_addr,
+BMI2_INTF_RETURN_TYPE bmi2_i2c_write(uint8_t reg_addr,
                                             const uint8_t *reg_data,
                                             uint32_t len, void *intf_ptr) {
     flow3r_bsp_imu_t *imu = (flow3r_bsp_imu_t *)intf_ptr;
@@ -120,8 +122,13 @@ esp_err_t flow3r_bsp_imu_init(flow3r_bsp_imu_t *imu) {
     bmi2_error_codes_print_result(rslt);
     if (rslt != BMI2_OK) return ESP_FAIL;
 
-    uint8_t sensor_list[] = { BMI2_ACCEL, BMI2_GYRO };
-    rslt = bmi2_sensor_enable(sensor_list, sizeof(sensor_list), &(imu->bmi));
+    uint8_t sensor_list[] = { BMI2_ACCEL, BMI2_GYRO, BMI2_STEP_COUNTER };
+
+    rslt = bmi270_sensor_enable(sensor_list, sizeof(sensor_list), &(imu->bmi));
+    bmi2_error_codes_print_result(rslt);
+    if (rslt != BMI2_OK) return ESP_FAIL;
+
+    rslt = set_step_counter_config(imu);
     bmi2_error_codes_print_result(rslt);
     if (rslt != BMI2_OK) return ESP_FAIL;
 
@@ -203,6 +210,40 @@ esp_err_t flow3r_bsp_imu_read_gyro_dps(flow3r_bsp_imu_t *imu, float *x,
     }
 
     return res;
+}
+
+esp_err_t flow3r_bsp_imu_read_steps(flow3r_bsp_imu_t *imu, uint32_t *steps) {
+    uint16_t int_status;
+
+    int8_t rslt = bmi2_get_int_status(&int_status, &(imu->bmi));
+    bmi2_error_codes_print_result(rslt);
+    if (rslt != BMI2_OK) return ESP_FAIL;
+
+    if (int_status & BMI270_STEP_CNT_STATUS_MASK)
+    {
+        /* Step counter interrupt occurred when watermark level (20 steps) is reached */
+        rslt = bmi270_get_feature_data(&_bmi_feat_data, 1, &(imu->bmi));
+        bmi2_error_codes_print_result(rslt);
+        if (rslt != BMI2_OK) return ESP_FAIL;
+
+        *steps = _bmi_feat_data.sens_data.step_counter_output;
+        return ESP_OK;
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
+/*!
+ * @brief get the temperature of the device
+ */
+esp_err_t flow3r_bsp_imu_read_temperature(flow3r_bsp_imu_t *imu, float *temperature) {
+    uint16_t temp_data;
+    int8_t rslt = bmi2_get_temperature_data(&temp_data, &(imu->bmi));
+    bmi2_error_codes_print_result(rslt);
+    if (rslt != BMI2_OK) return ESP_FAIL;
+    const float scaling = 0.001953125F;
+    const float offset = 23.0F; 
+    *temperature = ((float)temp_data * scaling ) + offset; 
+    return ESP_OK;
 }
 
 /*!
@@ -533,10 +574,6 @@ static int8_t set_accel_config(flow3r_bsp_imu_t *imu) {
         /* Set the accel configurations. */
         rslt = bmi2_set_sensor_config(&config, 1, &imu->bmi);
         bmi2_error_codes_print_result(rslt);
-
-        /* Map data ready interrupt to interrupt pin. */
-        rslt = bmi2_map_data_int(BMI2_DRDY_INT, BMI2_INT1, &imu->bmi);
-        bmi2_error_codes_print_result(rslt);
     }
 
     return rslt;
@@ -584,9 +621,26 @@ static int8_t set_gyro_config(flow3r_bsp_imu_t *imu) {
 
         rslt = bmi2_set_sensor_config(&config, 1, &imu->bmi);
         bmi2_error_codes_print_result(rslt);
+    }
 
-        /* Map data ready interrupt to interrupt pin. */
-        rslt = bmi2_map_data_int(BMI2_DRDY_INT, BMI2_INT1, &imu->bmi);
+    return rslt;
+}
+
+static int8_t set_step_counter_config(flow3r_bsp_imu_t *imu)
+{
+    int8_t rslt;
+    struct bmi2_sens_config config;
+
+    config.type = BMI2_STEP_COUNTER;
+
+    rslt = bmi270_get_sensor_config(&config, 1, &imu->bmi);
+    bmi2_error_codes_print_result(rslt);
+
+    if (rslt == BMI2_OK)
+    {
+        config.cfg.step_counter.watermark_level = 1;
+
+        rslt = bmi270_set_sensor_config(&config, 1, &imu->bmi);
         bmi2_error_codes_print_result(rslt);
     }
 
