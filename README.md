@@ -1,8 +1,6 @@
 # THIS FORK OF THE BADGE-2024-SOFTWARE IS BEING USED TO PROVIDE A TEST ENVIRONMENT FOR THE BADGEBOT APP
 [![Build Micropython](https://github.com/emfcamp/badge-2024-software/actions/workflows/build.yml/badge.svg)](https://github.com/emfcamp/badge-2024-software/actions/workflows/build.yml)
 
-[![Build Micropython](https://github.com/emfcamp/badge-2024-software/actions/workflows/build.yml/badge.svg)](https://github.com/emfcamp/badge-2024-software/actions/workflows/build.yml)
-
 # Tildagon Firmware
 
 Web flasher is available @ https://emfcamp.github.io/badge-2024-software/
@@ -55,7 +53,7 @@ where /dev/ttyACM0 is the device's endpoint. This value is correct on Linux.
 
 ### macOS
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > On macOS, Docker does not have access to the host's USB devices. You will need to use a different method to flash the badge, such as [using the web flasher](flasher/README.md).
 
 [UTM](https://getutm.app/), using QEMU as the virtualization backend, is an effective way to build and flash the badge.
