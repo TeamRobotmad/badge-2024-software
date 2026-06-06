@@ -159,7 +159,7 @@ class HexpansionManagerApp(app.App):
             _package = __import__(f"{mount}.app")
             package = _package.app
             print(f"Found app package: {package}")
-        except (ImportError, SyntaxError) as e:
+        except (ImportError, SyntaxError, ValueError) as e:
             print(e)
             print("Valid App module not found")
             self._cleanup_import_path(old_cwd, old_sys_path)
