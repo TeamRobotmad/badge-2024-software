@@ -23,6 +23,7 @@ class Timer:
 
     def __init__(self, *args, **kwargs):
         pass
+    
 class PWM:
 
     def __init__(self, *args, **kwargs):
@@ -30,46 +31,6 @@ class PWM:
 
     def duty_u16(self, *args, **kwargs):
         pass
-
-
-class Timer:
-
-    def __init__(self, *args, **kwargs):
-        pass
-class PWM:
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def duty_u16(self, *args, **kwargs):
-        pass
-
-
-class Timer:
-
-    def __init__(self, *args, **kwargs):
-        pass
-class PWM:
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def duty_u16(self, *args, **kwargs):
-        pass
-
-
-class Timer:
-
-    def __init__(self, *args, **kwargs):
-        pass
-class PWM:
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def duty_u16(self, *args, **kwargs):
-        pass
-
 
 class ADC:
     ATTN_11DB = None

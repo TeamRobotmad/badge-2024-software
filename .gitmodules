@@ -8,3 +8,7 @@
 	path = sim/apps/HexManager
 	url = https://github.com/TeamRobotmad/HexManager.git
 	branch = main
+[submodule "sim/apps/EMFBadge-Hexpansions-GPS"]
+	path = sim/apps/EMFBadge-Hexpansions-GPS
+	url = https://github.com/Robotmad/EMFBadge-Hexpansions-GPS.git
+	branch = main
