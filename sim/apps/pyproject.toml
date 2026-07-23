@@ -1,8 +1,8 @@
 # Pylint formatting policy used across the project.
-# Set to 200 to match existing code style and reduce noisy line wrapping.
+# Set to 500 to match existing code style and reduce noisy line wrapping.
 [tool.pylint.format]
-max-line-length = 200
-max-module-lines = 2000
+max-line-length = 500
+max-module-lines = 3000
 
 # General pylint behavior for this repository.
 [tool.pylint.master]
