@@ -2,7 +2,7 @@ from _sim import _sim
 import leds
 
 class NeoPixel:
-    
+
     def __init__(self, pin, n, bpp=3, timing=1):
         self.pin = pin
         self.n = n
@@ -14,9 +14,12 @@ class NeoPixel:
 
     def fill(self, color):
         leds.set_all_rgb(*color)
-    
+
     def __setitem__(self, item, value):
         leds.set_rgb(item, *value)
+
+    def __getitem__(self, item):
+        return leds.get_rgb(item)
 
 class MergedNeoPixel:
     def __init__(self, string, indices):
@@ -154,4 +157,3 @@ class CallbackCorrection:
 
     def __call__(self, v):
         return self.callback(v, **self.kwargs)
-

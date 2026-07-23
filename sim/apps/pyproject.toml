@@ -9,7 +9,7 @@ max-module-lines = 3000
 # Add the shared badge module tree as an import root for linting.
 # Keep app-local imports like `import app` out of this path to avoid
 # cross-app ambiguity when multiple simulator apps live in one workspace.
-init-hook = "import sys; from pathlib import Path; root = Path().resolve(); modules = str(root / 'modules'); sys.path.insert(0, modules) if modules not in sys.path else None"
+init-hook = "import sys; from pathlib import Path; root = Path().resolve(); root = next((candidate for candidate in (root, *root.parents) if (candidate / 'modules').exists()), root); modules = str(root / 'modules'); fakes = str(root / 'sim' / 'fakes'); sys.path.insert(0, modules) if modules not in sys.path else None; sys.path.insert(0, fakes) if fakes not in sys.path else None"
 
 # These modules are provided by BadgeOS/MicroPython runtime or simulator,
 # not by standard desktop CPython. Ignoring them avoids false E0401 import
