@@ -23,6 +23,7 @@ class Timer:
 
     def __init__(self, *args, **kwargs):
         pass
+
 class PWM:
 
     def __init__(self, *args, **kwargs):
@@ -30,7 +31,6 @@ class PWM:
 
     def duty_u16(self, *args, **kwargs):
         pass
-
 
 class ADC:
     ATTN_11DB = None
@@ -62,6 +62,24 @@ class I2C:
 
 class SPI:
     pass
+
+
+class UART:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def read(self, *args, **kwargs):
+        return b''
+
+    def write(self, *args, **kwargs):
+        return 0
+
+    def any(self):
+        return 0
+
+    def deinit(self):
+        pass
+
 
 def reset():
     print("beep boop i have reset")

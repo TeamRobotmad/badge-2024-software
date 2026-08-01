@@ -162,8 +162,7 @@ class Wasm:
         self.free(p)
         self.free(wh)
 
-        res, w, h, c = r
-        b = mem[res:]
+        b = mem[res:res + w * h * c]
         if c == 3:
             return r
         for j in range(h):
@@ -194,6 +193,7 @@ class Context:
     HANGING = "hanging"
     CLEAR = "clear"
     END = "end"
+    TOP = "top"
     MIDDLE = "middle"
     BOTTOM = "bottom"
     BEVEL = "bevel"
@@ -204,6 +204,7 @@ class Context:
         self._ctx = _ctx
         self._font_size = 0
         self._line_width = 0
+        self.a11y = None
 
     @property
     def image_smoothing(self):
@@ -396,6 +397,8 @@ class Context:
 
     def text(self, s):
         self._emit(f'text "{s}"')
+        if self.a11y:
+            self.a11y.collect_text(s)
         return self
 
     def round_rectangle(self, x, y, width, height, radius):
@@ -409,10 +412,21 @@ class Context:
             buf = open(path, "rb").read()
             _img_cache[path] = _wasm.stbi_load_from_memory(buf)
         img, width, height, components = _img_cache[path]
+        # Allocate some space to receive the EID as determined by ctx, the
+        # ret_eid param will either be set to the path we pass in unchanged,
+        # or if the path is too long we will get back a SHA sum instead
+        ret_eid = _wasm.malloc(65) # 64 + 1 byte for null terminator
         _wasm.ctx_define_texture(
-            self._ctx, path, width, height, width * components, RGBA8, img, 0
+            self._ctx, path, width, height, width * components, RGBA8, img, ret_eid
         )
-        _wasm.ctx_draw_texture(self._ctx, path, x, y, w, h)
+        mem = _wasm._memory.data_ptr(_wasm._store)
+        eid = ""
+        for b in mem[ret_eid:ret_eid + 65]:
+            if not b:
+                break
+            eid += chr(b)
+        _wasm.free(ret_eid)
+        _wasm.ctx_draw_texture(self._ctx, eid, x, y, w, h)
         return self
 
     def rectangle(self, x, y, width, height):
@@ -443,6 +457,10 @@ class Context:
 
     def linear_gradient(self, x0, y0, x1, y1):
         self._emit(f"linearGradient {x0:.3f} {y0:.3f} {x1:.3f} {y1:.3f}")
+        return self
+
+    def conic_gradient(self, cx, cy, start_angle, cycles):
+        self._emit(f"conicGradient {cx:.3f} {cy:.3f} {start_angle:.3f} {cycles:.3f}")
         return self
 
     def add_stop(self, pos, color, alpha):
@@ -488,15 +506,7 @@ class Context:
 
     def get_font_name(self, i):
         return [
-            "Arimo Regular",
-            "Arimo Bold",
-            "Arimo Italic",
-            "Arimo Bold Italic",
-            "Camp Font 1",
-            "Camp Font 2",
-            "Camp Font 3",
-            "Material Icons",
-            "Comic Mono",
+            "EMF Camp Font"
         ][i]
 
     def scope(self):

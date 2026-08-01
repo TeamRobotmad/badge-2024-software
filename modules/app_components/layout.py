@@ -1,5 +1,6 @@
 from events.input import BUTTON_TYPES
 from . import tokens, utils
+from system.a11y.utils import Inhibitor
 
 
 class Layoutable:
@@ -61,7 +62,9 @@ class ButtonDisplay(Layoutable):
             bg = tokens.ui_colors["button_background"]
             fg = tokens.ui_colors["active_button_text"]
         ctx.rgb(*bg)
-        ctx.round_rectangle(0, 0, tokens.display_x, 40, 30).fill()
+        ctx.round_rectangle(
+            0, 0, tokens.display_x, 40, tokens.ui_colors["button_radius"]
+        ).fill()
 
         # Draw text
         ctx.rgb(*fg)
@@ -72,6 +75,8 @@ class ButtonDisplay(Layoutable):
         ctx.restore()
 
     async def button_event(self, event):
+        if BUTTON_TYPES["CONFIRM"] not in event.button:
+            return False
         if self.button_handler:
             return await self.button_handler(event)
         return False
@@ -114,7 +119,7 @@ class DefinitionDisplay(Layoutable):
             ctx.font_size = tokens.one_pt * 8
             self._label_lines = utils.wrap_text(ctx, self.label, tokens.label_font_size)
             self._label_widths = [ctx.text_width(line) for line in self._label_lines]
-            self._label_height = len(self._label_lines) * ctx.font_size
+            self._label_height = len(self._label_lines) * tokens.one_pt * 10
 
         # Pre-compute value line geometry (happens each time a value changes)
         if self._value_lines is None:
@@ -123,7 +128,7 @@ class DefinitionDisplay(Layoutable):
                 ctx, self._value, tokens.label_font_size, 230
             )
             self._value_widths = [ctx.text_width(line) for line in self._value_lines]
-            self._value_height = len(self._value_lines) * ctx.font_size
+            self._value_height = len(self._value_lines) * tokens.one_pt * 13
 
         self.height = self._label_height + self._value_height
 
@@ -137,7 +142,7 @@ class DefinitionDisplay(Layoutable):
         for line, width in zip(self._label_lines, self._label_widths):
             ctx.move_to(115 - width / 2, y)
             ctx.text(line)
-            y += tokens.one_pt * 8
+            y += tokens.one_pt * 10
 
         # Draw value
         ctx.rgb(*tokens.ui_colors["label"])
@@ -145,7 +150,7 @@ class DefinitionDisplay(Layoutable):
         for line, width in zip(self._value_lines, self._value_widths):
             ctx.move_to(115 - width / 2, y)
             ctx.text(line)
-            y += tokens.ten_pt
+            y += tokens.one_pt * 13
 
         ctx.restore()
 
@@ -189,7 +194,8 @@ class LinearLayout(Layoutable):
                 self.height += item_height
                 cumulative_y += item_height
             else:
-                item.draw(ctx, focused=item == focused_child)
+                with Inhibitor(ctx.a11y, item != focused_child):
+                    item.draw(ctx, focused=item == focused_child)
                 ctx.translate(0, item.height)
                 self.height += item.height
                 cumulative_y += item.height

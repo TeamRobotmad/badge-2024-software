@@ -4,6 +4,7 @@ import settings
 import asyncio
 import os
 import sys
+import neopixel
 from system.patterndisplay.events import (
     PatternEnable,
     PatternDisable,
@@ -14,6 +15,7 @@ from system.eventbus import eventbus
 from app_components.utils import path_isfile
 from firmware_apps.settings_app import PAT_DIR
 from system.notification.events import ShowNotificationEvent
+from frontboards.twentysix import TwentyTwentySix
 
 
 class PatternDisplay(App):
@@ -25,6 +27,25 @@ class PatternDisplay(App):
         eventbus.on_async(PatternSet, self._set, self)
         self.load_pattern()
         self.enabled = settings.get("pattern_generator_enabled", True)
+        self.correction = neopixel.DimCorrection(1.0)
+        self.leds = neopixel.CorrectedNeoPixel(
+            neopixel.ComposedNeoPixel(tildagonos.leds, -1),
+            [self.correction] * 12 + [None] * 6,
+        )
+        self.TOUCH_KEYS = [
+            "TOUCH01",
+            "TOUCH02",
+            "TOUCH03",
+            "TOUCH04",
+            "TOUCH05",
+            "TOUCH06",
+            "TOUCH07",
+            "TOUCH08",
+            "TOUCH09",
+            "TOUCH10",
+            "TOUCH11",
+            "TOUCH12",
+        ]
 
     def load_pattern(self):
         self.pattern = settings.get("pattern", ("rainbow", None))
@@ -52,7 +73,10 @@ class PatternDisplay(App):
                         ],
                     )
                     _pclass = getattr(_pmodule, _patternclass)
-                    self._p = _pclass()
+                    try:
+                        self._p = _pclass(12)
+                    except TypeError:
+                        self._p = _pclass()
                 except ImportError:
                     raise ImportError(f"Pattern {path} not found!")
                 except Exception as e:
@@ -74,7 +98,10 @@ class PatternDisplay(App):
                     ],
                 )
                 _pclass = getattr(_pmodule, _patternclass)
-                self._p = _pclass()
+                try:
+                    self._p = _pclass(12)
+                except TypeError:
+                    self._p = _pclass()
             except ImportError:
                 raise ImportError(f"Pattern {self.pattern} not found!")
             except Exception as e:
@@ -96,17 +123,15 @@ class PatternDisplay(App):
         while True:
             if self._p:
                 try:
-                    brightness = settings.get("pattern_brightness", 0.1)
+                    self.correction.amount = settings.get("pattern_brightness", 0.1)
                     next_frame = self._p.next()
                     if self.enabled:
                         for led in range(12):
-                            if brightness < 1.0:
-                                tildagonos.leds[led + 1] = tuple(
-                                    int(i * brightness) for i in next_frame[led]
-                                )
+                            if TwentyTwentySix.touch_states[self.TOUCH_KEYS[led]][0]:
+                                self.leds[led] = (255, 255, 255)
                             else:
-                                tildagonos.leds[led + 1] = next_frame[led]
-                        tildagonos.leds.write()
+                                self.leds[led] = next_frame[led]
+                        self.leds.write()
                     if not self._p.fps:
                         break
                     await asyncio.sleep(1 / self._p.fps)

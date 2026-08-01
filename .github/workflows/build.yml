@@ -27,7 +27,38 @@ jobs:
           ./scripts/firstTime.sh
       - name: Build firmware
         run: |
-          docker run -q --rm --env "TARGET=esp32s3" -v "$(pwd)"/:/firmware ghcr.io/emfcamp/esp_idf:v5.2.1
+          docker run -q --rm --env "TARGET=esp32s3" -v "$(pwd)"/:/firmware ghcr.io/emfcamp/esp_idf:v5.5.1
+      - name: Set up Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 5.0.3
+      - name: Build WASM firmware
+        run: |
+          bash scripts/build_wasm.sh
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push mpy-cross image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.mpcross
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/emfcamp/mpy-cross:v5.5.1
+
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -40,6 +71,8 @@ jobs:
             micropython/ports/esp32/build-tildagon/partition_table/partition-table.bin
             micropython/ports/esp32/build-tildagon/ota_data_initial.bin
             micropython/ports/esp32/build-tildagon/tildagon.txt
+            micropython/ports/webassembly/build-tildagon/micropython.mjs
+            micropython/ports/webassembly/build-tildagon/micropython.wasm
       - name: Create latest release for tags
         uses: "marvinpinto/action-automatic-releases@latest"
         if: ${{startsWith(github.event.ref, 'refs/tags/v') && !contains(github.event.ref, '-') }}
@@ -51,6 +84,8 @@ jobs:
           files: |
             micropython/ports/esp32/build-tildagon/micropython.bin
             micropython/ports/esp32/build-tildagon/tildagon.txt
+            micropython/ports/webassembly/build-tildagon/micropython.mjs
+            micropython/ports/webassembly/build-tildagon/micropython.wasm
       - name: Create specific release for tags
         uses: "marvinpinto/action-automatic-releases@latest"
         if: ${{startsWith(github.event.ref, 'refs/tags/v')}}
@@ -60,6 +95,8 @@ jobs:
           files: |
             micropython/ports/esp32/build-tildagon/micropython.bin
             micropython/ports/esp32/build-tildagon/tildagon.txt
+            micropython/ports/webassembly/build-tildagon/micropython.mjs
+            micropython/ports/webassembly/build-tildagon/micropython.wasm
       - name: Create preview release for rc tags
         uses: "marvinpinto/action-automatic-releases@latest"
         if: ${{startsWith(github.event.ref, 'refs/tags/v') && contains(github.event.ref, '-') }}
@@ -71,13 +108,16 @@ jobs:
           files: |
             micropython/ports/esp32/build-tildagon/micropython.bin
             micropython/ports/esp32/build-tildagon/tildagon.txt
+            micropython/ports/webassembly/build-tildagon/micropython.mjs
+            micropython/ports/webassembly/build-tildagon/micropython.wasm
       - name: Build merged image
         run: |
-          source esp-idf/export.sh
-          cd micropython/ports/esp32
-          python -m esptool --chip esp32s3 -b 460800 merge_bin -o merged-firmware.bin --flash_mode dio --flash_size 8MB --flash_freq 80m 0x0 build-tildagon/bootloader/bootloader.bin 0x8000 build-tildagon/partition_table/partition-table.bin 0xd000 build-tildagon/ota_data_initial.bin 0x10000 build-tildagon/micropython.bin
-          cp merged-firmware.bin $GITHUB_WORKSPACE/flasher/
-        if: startsWith(github.event.ref, 'refs/tags/v')
+          docker run --entrypoint=/firmware/scripts/merge-firmwares.sh -q --rm --env "TARGET=esp32s3" -v "$(pwd)"/:/firmware ghcr.io/emfcamp/esp_idf:v5.5.1
+        if: ${{startsWith(github.event.ref, 'refs/tags/v') && !contains(github.event.ref, '-') }}
+      - name: Move merged image
+        run: |
+          cp micropython/ports/esp32/merged-firmware.bin $GITHUB_WORKSPACE/flasher/
+        if: ${{startsWith(github.event.ref, 'refs/tags/v') && !contains(github.event.ref, '-') }}
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/upload-pages-artifact@v3 # or specific "vX.X.X" version tag for this action
