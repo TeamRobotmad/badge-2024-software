@@ -4,7 +4,7 @@ import sys
 import time
 
 from events.emote import EmoteNegativeEvent
-from system.a11y.events import ReplaceAccessibiltiyHandlerEvent
+from system.a11y.events import ReplaceAccessibilityHandlerEvent
 from perf_timer import PerfTimer
 from system.a11y import printer
 from system.eventbus import eventbus
