@@ -99,7 +99,11 @@ class EEPROM(EepromDevice):
             # assert npage > 0
             # Offset address into chip: one or two bytes
             vaddr = self._addrbuf[1:] if self._onebyte else self._addrbuf
-            memaddr = self._addrbuf[1] if self._onebyte else (self._addrbuf[0] << 8) | self._addrbuf[1]
+            memaddr = (
+                self._addrbuf[1]
+                if self._onebyte
+                else (self._addrbuf[0] << 8) | self._addrbuf[1]
+            )
             if read:
                 # self._i2c.writeto(self._i2c_addr, vaddr)
                 self._i2c.readfrom_mem_into(
@@ -109,7 +113,7 @@ class EEPROM(EepromDevice):
                     addrsize=self.addrsize,
                 )
             else:
-                self._i2c.writevto(self._i2c_addr, (vaddr, buf[start : start + npage]))
+                self._i2c.writeto(self._i2c_addr, (vaddr, buf[start : start + npage]))
                 self._wait_rdy()
             nbytes -= npage
             start += npage
