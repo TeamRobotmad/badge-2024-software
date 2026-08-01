@@ -28,10 +28,18 @@ _MODULES = os.path.join(
 if _MODULES not in sys.path:
     sys.path.insert(0, _MODULES)
 
+if not hasattr(time, "ticks_ms"):
+    time.ticks_ms = lambda: int(time.monotonic() * 1_000)
 if not hasattr(time, "ticks_us"):
     time.ticks_us = lambda: int(time.monotonic() * 1_000_000)
 if not hasattr(time, "ticks_diff"):
     time.ticks_diff = lambda a, b: a - b
+if not hasattr(time, "ticks_add"):
+    time.ticks_add = lambda ticks, delta: ticks + delta
+if not hasattr(time, "sleep_ms"):
+    time.sleep_ms = lambda ms: time.sleep(ms / 1_000)
+if not hasattr(time, "sleep_us"):
+    time.sleep_us = lambda us: time.sleep(us / 1_000_000)
 
 if not hasattr(sys, "print_exception"):
     import traceback
