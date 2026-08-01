@@ -3,10 +3,12 @@ import math
 
 import display
 from events.input import BUTTON_TYPES, ButtonDownEvent
+from frontboards.common import FRONTBOARD_BUTTON_TYPES
 from events.keyboard import KEYBOARD_BUTTONS
 from system.eventbus import eventbus
 
 from .tokens import button_labels, label_font_size, set_color
+from .utils import wrap_text
 
 SPECIAL_KEY_META = "..."
 SPECIAL_KEY_DONE = "Done"
@@ -21,7 +23,7 @@ SPECIAL_KEY_SPACE = "Space"
 LOWERCASE_ALPHABET = list("abcdefghijklmnopqrstuvwxyz")
 UPPERCASE_ALPHABET = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
 SYMBOL_ALPHABET = list("-=!\"£$%^&*()_+[];'#,./{}:@~<>?") + [SPECIAL_KEY_SPACE]
-HEX_ALPHABET = list("ABCDEF0123456789")
+HEX_ALPHABET = list("0123456789ABCDEF")
 NUM_ALPHABET = list("0123456789.")
 
 
@@ -78,7 +80,7 @@ class YesNoDialog:
             self._cleanup()
             self._result = False
             if self.no_handler is not None:
-                result = await self.no_handler()
+                result = self.no_handler()
                 if hasattr(result, "pend_throw"):
                     await result
 
@@ -116,6 +118,7 @@ class ProgressDialog:
 
         # Tightly loop, waiting for a result, then return it
         while self.result is None:
+            await render_update()
             await asyncio.sleep(0.05)
         self.app.overlays.pop()
         await render_update()
@@ -130,10 +133,12 @@ class ProgressDialog:
         set_color(ctx, "label")
 
         if isinstance(self.message, list):
-            for idx, line in enumerate(self.message):
-                ctx.move_to(0, idx * text_height).text(line)
+            message = self.message
         else:
-            ctx.move_to(0, 0).text(self.message)
+            message = wrap_text(ctx, self.message, ctx.font_size)
+
+        for idx, line in enumerate(message):
+            ctx.move_to(0, idx * text_height).text(line)
 
     def draw(self, ctx):
         ctx.save()
@@ -226,6 +231,18 @@ class TextDialog:
         ctx.move_to(0, 15).text(
             self.text if not self.masked else ("*" * len(self.text))
         )
+        if ctx.a11y:
+            ctx.a11y.add_alt(self, self.message + ":")
+            ctx.a11y.add_alt(self, self.text if not self.masked else "Hidden")
+
+    def speak_keys(self, ctx, keys):
+        if len(keys) > 1:
+            ctx.a11y.add_alt(self, f"'{keys[0].upper()} to '{keys[-1].upper()}'.")
+        else:
+            if keys[0] == SPECIAL_KEY_META:
+                ctx.a11y.add_alt(self, "More.")
+            else:
+                ctx.a11y.add_alt(self, f"'{keys[0].upper()}'.")
 
     def draw(self, ctx):
         ctx.save()
@@ -243,6 +260,11 @@ class TextDialog:
                 confirm_label="".join(self._keys[2]),
                 cancel_label="".join(self._keys[5]),
             )
+        if ctx.a11y:
+            ctx.a11y.add_alt(self, "Buttons:")
+            for i in range(6):
+                if self._keys[i]:
+                    self.speak_keys(ctx, self._keys[i])
 
         ctx.restore()
 
@@ -252,17 +274,17 @@ class TextDialog:
 
         kbd_button = event.button.find_parent_in_group("Keyboard")
 
-        if BUTTON_TYPES["UP"] in event.button:
+        if FRONTBOARD_BUTTON_TYPES["A"] in event.button:
             key = 0
-        elif BUTTON_TYPES["RIGHT"] in event.button:
+        elif FRONTBOARD_BUTTON_TYPES["B"] in event.button:
             key = 1
-        elif BUTTON_TYPES["DOWN"] in event.button:
+        elif FRONTBOARD_BUTTON_TYPES["D"] in event.button:
             key = 3
-        elif BUTTON_TYPES["LEFT"] in event.button:
+        elif FRONTBOARD_BUTTON_TYPES["E"] in event.button:
             key = 4
-        elif BUTTON_TYPES["CANCEL"] in event.button:
+        elif FRONTBOARD_BUTTON_TYPES["F"] in event.button:
             key = 5
-        elif BUTTON_TYPES["CONFIRM"] in event.button:
+        elif FRONTBOARD_BUTTON_TYPES["C"] in event.button:
             key = 2
 
         elif kbd_button is not None:
@@ -286,6 +308,18 @@ class TextDialog:
             elif kbd_button.name in SYMBOL_ALPHABET:
                 key = -2
                 final = kbd_button.name
+
+        # The following are generics not caught by either frontboard corner buttons
+        # or keyboard events. They are, therefore, secondary confirm/cancel/etc buttons
+        elif BUTTON_TYPES["CONFIRM"] in event.button:
+            key = -2
+            final = SPECIAL_KEY_DONE
+        elif BUTTON_TYPES["UP"] in event.button:
+            key = -2
+            final = SPECIAL_KEY_CAPS
+        elif BUTTON_TYPES["LEFT"] in event.button:
+            key = -2
+            final = SPECIAL_KEY_BACKSPACE
 
         if key == -1:
             return
@@ -348,7 +382,7 @@ class TextDialog:
                     self._current_alphabet = self._default_alphabet
                 self._layer = 0
                 if self._caps:
-                    self._current_alphabet = self.self._shifted_alphabet
+                    self._current_alphabet = self._shifted_alphabet
                 else:
                     self._current_alphabet = self._default_alphabet
         elif len(selected) > 0:
