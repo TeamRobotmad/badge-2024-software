@@ -48,6 +48,12 @@ class HexpansionHeader:
             checksum ^= byte
         return checksum
 
+    def __eq__(self, other):
+        try:
+            return self.to_bytes() == other.to_bytes()
+        except Exception:
+            return False
+
     def to_bytes(self, include_checksum=True):
         b = struct.pack(
             self._header_format,
@@ -70,8 +76,8 @@ class HexpansionHeader:
             raise RuntimeError("Invalid header length, should be 32")
         if buf[1:4] != b"HEX":
             raise RuntimeError(f"Invalid magic in hexpansion header: {buf[0:4]}")
-        if buf[4:8] != b"2024":
-            raise RuntimeError("Unknown manifest version. Supported: [2024]")
+        if buf[4:8] != b"2024" and buf[4:8] != b"2026":
+            raise RuntimeError("Unknown manifest version. Supported: [2024, 2026]")
         unpacked = struct.unpack(cls._header_format, buf)
 
         if validate_checksum:

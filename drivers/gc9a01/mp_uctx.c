@@ -2,14 +2,22 @@
 #include "py/binary.h"
 #include "py/obj.h"
 #include "py/objarray.h"
+#include "py/objstr.h"
 #include "py/runtime.h"
 
 #include "mp_uctx.h"
+
 
 #ifdef EMSCRIPTEN
 #pragma GCC diagnostic ignored "-Wdouble-promotion"
 #pragma GCC diagnostic ignored "-Wfloat-conversion"
 Ctx *ctx_host(void);
+
+#define esp_random rand
+#endif
+
+#ifndef EMSCRIPTEN
+#include "esp_random.h"
 #endif
 
 void gc_collect(void);
@@ -21,6 +29,38 @@ void mp_idle(int ms) {
     if (ms == 0) gc_collect();
 }
 #endif
+
+static int no_replace = -1;
+
+mp_obj_t remove_leg(mp_obj_t str_in) {
+    /* Once per boot, generate a random number 0-7. If the number is >0, make this function
+    a no-op. If it is 0, this function will do a micropython string replace into a temporary
+    buffer, to replace \u81e9 with \u71e9 on all ctx text calls.
+    */
+    if (no_replace == -1)
+        no_replace = (esp_random() % 8);
+    if (no_replace)
+        return str_in;
+
+    GET_STR_DATA_LEN(str_in, s, l);
+
+    vstr_t vstr;
+    vstr_init(&vstr, l);
+
+    for (size_t i = 0; i < l; ) {
+        if (i + 3 <= l && s[i] == 0xE8 && s[i + 1] == 0x87 && s[i + 2] == 0xA9) {
+            vstr_add_byte(&vstr, 0xE7);
+            vstr_add_byte(&vstr, 0x87);
+            vstr_add_byte(&vstr, 0xA9);
+            i += 3;
+        } else {
+            vstr_add_byte(&vstr, s[i]);
+            i += 1;
+        }
+    }
+
+    return mp_obj_new_str_from_vstr(&vstr);
+}
 
 void gc_collect(void);
 /* since a lot of the ctx API has similar function signatures, we use macros to
@@ -178,7 +218,13 @@ void gc_collect(void);
     static mp_obj_t mp_ctx_##name(size_t n_args, const mp_obj_t *args) { \
         assert(n_args == 2);                                             \
         mp_ctx_obj_t *self = MP_OBJ_TO_PTR(args[0]);                     \
-        ctx_##name(self->ctx, mp_obj_str_get_str(args[1]));              \
+        mp_obj_t callee[3];                                              \
+        if (self->a11y != MP_OBJ_NULL && self->a11y != mp_const_none) {  \
+            mp_load_method(self->a11y, MP_QSTR_collect_text, callee);    \
+            callee[2] = args[1];                                         \
+            mp_call_method_n_kw(1, 0, callee);                           \
+        }                                                                \
+        ctx_##name(self->ctx, mp_obj_str_get_str(remove_leg(args[1])));  \
         return args[0];                                                  \
     }                                                                    \
     MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_ctx_##name##_obj, 2, 2,       \
@@ -214,6 +260,7 @@ MP_CTX_COMMON_FUN_0(start_group);
 MP_CTX_COMMON_FUN_0(end_group);
 #endif
 MP_CTX_COMMON_FUN_0(clip);
+MP_CTX_COMMON_FUN_0(identity);
 MP_CTX_COMMON_FUN_1F(rotate);
 MP_CTX_COMMON_FUN_2F(scale);
 MP_CTX_COMMON_FUN_2F(translate);
@@ -524,6 +571,32 @@ STATIC void generic_method_lookup(mp_obj_t obj, qstr attr, mp_obj_t *dest) {
     }
 }
 
+static mp_obj_t mp_ctx_load_font_ctx(mp_obj_t self_in, mp_obj_t name_in, mp_obj_t buffer_in) {
+    mp_buffer_info_t buffer_info;
+    if (!mp_get_buffer(buffer_in, &buffer_info, MP_BUFFER_READ)) {
+        mp_raise_TypeError(MP_ERROR_TEXT("not a buffer"));
+    }
+    const char *name = mp_obj_str_get_str(name_in);
+    ctx_load_font_ctx(name, buffer_info.buf, buffer_info.len);
+    return self_in;
+}
+MP_DEFINE_CONST_FUN_OBJ_3(mp_ctx_load_font_ctx_obj, mp_ctx_load_font_ctx);
+
+static mp_obj_t mp_ctx_textureclock(mp_obj_t self_in) {
+    mp_ctx_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    int clock = ctx_textureclock(self->ctx);
+    return mp_obj_new_int(clock);
+}
+MP_DEFINE_CONST_FUN_OBJ_1(mp_ctx_textureclock_obj, mp_ctx_textureclock);
+
+static mp_obj_t mp_ctx_set_textureclock(mp_obj_t self_in, mp_obj_t clock_obj) {
+    mp_ctx_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    int clock = mp_obj_get_int(clock_obj);
+    ctx_set_textureclock(self->ctx, clock);
+    return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_2(mp_ctx_set_textureclock_obj, mp_ctx_set_textureclock);
+
 #if CTX_TINYVG
 static mp_obj_t mp_ctx_tinyvg_get_size(mp_obj_t self_in, mp_obj_t buffer_in) {
     mp_buffer_info_t buffer_info;
@@ -573,6 +646,7 @@ mp_obj_t mp_ctx_from_ctx(Ctx *ctx) {
     mp_ctx_obj_t *o = m_new_obj(mp_ctx_obj_t);
     o->base.type = &mp_ctx_type;
     o->ctx = ctx;
+    o->a11y = mp_const_none;
     return MP_OBJ_FROM_PTR(o);
 }
 
@@ -580,6 +654,7 @@ static mp_obj_t mp_ctx_make_new(const mp_obj_type_t *type, size_t n_args,
                                 size_t n_kw, const mp_obj_t *all_args) {
     mp_ctx_obj_t *o = m_new_obj(mp_ctx_obj_t);
     o->base.type = type;
+    o->a11y = mp_const_none;
     enum {
         ARG_width,
         ARG_height,
@@ -712,6 +787,8 @@ STATIC mp_obj_t mp_ctx_attr_op(mp_obj_t self_in, qstr attr, mp_obj_t set_val) {
                 return mp_obj_new_float(ctx_x(self->ctx));
             case MP_QSTR_y:
                 return mp_obj_new_float(ctx_y(self->ctx));
+            case MP_QSTR_a11y:
+                return self->a11y;
         }
     } else {
         switch (attr) {
@@ -773,6 +850,9 @@ STATIC mp_obj_t mp_ctx_attr_op(mp_obj_t self_in, qstr attr, mp_obj_t set_val) {
             case MP_QSTR_font_size:
                 ctx_font_size(self->ctx, (float)mp_obj_get_float(set_val));
                 break;
+            case MP_QSTR_a11y:
+                self->a11y = set_val;
+                break;
         }
         return set_val;
     }
@@ -792,7 +872,8 @@ STATIC void mp_ctx_attr(mp_obj_t obj, qstr attr, mp_obj_t *dest) {
         attr == MP_QSTR_wrap_left || attr == MP_QSTR_wrap_right ||
         attr == MP_QSTR_miter_limit || attr == MP_QSTR_global_alpha ||
         attr == MP_QSTR_font_size || attr == MP_QSTR_font ||
-        attr == MP_QSTR_x || attr == MP_QSTR_y) {
+        attr == MP_QSTR_x || attr == MP_QSTR_y ||
+        attr == MP_QSTR_a11y) {
         if (dest[0] == MP_OBJ_NULL) {
             // load attribute
             mp_obj_t val = mp_ctx_attr_op(obj, attr, MP_OBJ_NULL);
@@ -838,6 +919,7 @@ static const mp_rom_map_elem_t mp_ctx_locals_dict_table[] = {
     MP_CTX_METHOD(clip),
     MP_CTX_METHOD(text),
     MP_CTX_METHOD(text_width),
+    MP_CTX_METHOD(identity),
     MP_CTX_METHOD(rotate),
     MP_CTX_METHOD(scale),
     MP_CTX_METHOD(translate),
@@ -856,10 +938,13 @@ static const mp_rom_map_elem_t mp_ctx_locals_dict_table[] = {
     MP_CTX_METHOD(add_stop),
     MP_CTX_METHOD(line_dash),
     MP_CTX_METHOD(texture),
+    MP_CTX_METHOD(textureclock),
+    MP_CTX_METHOD(set_textureclock),
     MP_CTX_METHOD(image),
     MP_CTX_METHOD(start_frame),
     MP_CTX_METHOD(end_frame),
     MP_CTX_METHOD(get_font_name),
+    MP_CTX_METHOD(load_font_ctx),
 
 #if CTX_PARSER
     MP_CTX_METHOD(parse),
