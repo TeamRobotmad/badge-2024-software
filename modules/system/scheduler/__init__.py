@@ -61,7 +61,7 @@ class _Scheduler:
         )
 
         eventbus.on_async(
-            ReplaceAccessibiltiyHandlerEvent, self._handle_new_a11y_handler, self
+            ReplaceAccessibilityHandlerEvent, self._handle_new_a11y_handler, self
         )
         self.a11y_handler = printer._printa11y
 
