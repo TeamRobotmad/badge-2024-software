@@ -34,6 +34,7 @@
 #include "extmod/modmachine.h"
 
 #include "driver/i2c.h"
+//#include "driver/i2c_master.h"
 #include "hal/i2c_ll.h"
 #include "driver/gpio.h"
 
@@ -41,6 +42,8 @@
 
 
 #if MICROPY_PY_TILDAGON_I2C
+
+#define TILDAGON_I2C_MUX_ADDRESS (0x77)
 
 #define I2C_DEFAULT_TIMEOUT_US (50000) // 50ms
 
@@ -53,9 +56,58 @@ static tildagon_mux_i2c_obj_t tildagon_mux_i2c_obj[8];
 
 static tca9548a_i2c_mux_t tildagon_i2c_mux;
 
+// Allocate a binary semaphore to handle signaling between the hardware application code
+//static SemaphoreHandle_t i2c_tx_done_sem = NULL;
+//static i2c_master_bus_handle_t bus_handle;
+//static i2c_master_dev_handle_t dev_handle;
+
+/*
+// This function executes entirely in the hardware INTERRUPT context when the transaction is complete.
+static bool IRAM_ATTR i2c_master_done_callback(i2c_master_dev_handle_t i2c_dev, const i2c_master_event_t *evt, void *user_data) {
+    BaseType_t high_task_wakeup = pdFALSE;
+
+    if (evt->event == I2C_MASTER_EVENT_DONE) {
+        // Unblock any task waiting on the final received data or status confirmation
+        xSemaphoreGiveFromISR(i2c_tx_done_sem, &high_task_wakeup);
+    }
+
+    // Return true if a higher priority thread needs to handle the finished I2C packet immediately
+    return high_task_wakeup == pdTRUE;
+}
+
+
+// Initialization snippet
+void init_async_i2c(i2c_master_bus_handle_t bus_handle, i2c_master_dev_handle_t *dev_handle, uint16_t slave_addr) {
+    i2c_tx_done_sem = xSemaphoreCreateBinary();
+
+    i2c_master_bus_config_t i2c_mst_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = TILDAGON_HOST_I2C_PORT,
+        .scl_io_num = TILDAGON_HOST_I2C_SCL,
+        .sda_io_num = TILDAGON_HOST_I2C_SDA,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+    ESP_ERROR_CHECK(i2c_master_bus_init(&i2c_mst_config, &bus_handle));
+
+    i2c_device_config_t dev_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = slave_addr,
+        .scl_speed_hz = TILDAGON_HOST_I2C_FREQ,
+    };
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle));
+
+    // Registering these structural callbacks signals the hardware driver to become completely asynchronous
+    i2c_master_event_callbacks_t cbs = {
+        .on_trans_done = i2c_master_done_callback,
+    };
+    i2c_master_register_event_callbacks(*dev_handle, &cbs, NULL);
+}
+*/
+
 tildagon_mux_i2c_obj_t* tildagon_get_mux_obj( uint8_t port )
 {
-    if ( tildagon_mux_i2c_obj[port].base.type == NULL ) 
+    if ( tildagon_mux_i2c_obj[port].base.type == NULL )
     {
         // Created for the first time
         tildagon_mux_i2c_obj[port].base.type = &machine_i2c_type;
@@ -71,9 +123,14 @@ const tca9548a_i2c_mux_t *tildagon_get_i2c_mux() {
 
 void tildagon_i2c_init() {
     tildagon_i2c_mux.mtx = xSemaphoreCreateMutex();
-    tildagon_i2c_mux.addr = 0x77;
+    tildagon_i2c_mux.addr = TILDAGON_I2C_MUX_ADDRESS;       // Address for the TCA9548A I2C multiplexer on the Tildagon board
     tildagon_i2c_mux.active_port = -1;
-    
+
+
+//  init_async_i2c(bus_handle, &dev_handle, tildagon_i2c_mux.addr);
+
+    // migrating from the legacy ESP-IDF I2C driver to the new async driver, so leaving this here for now
+
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
         .sda_io_num = TILDAGON_HOST_I2C_SDA,
@@ -93,9 +150,13 @@ void tildagon_i2c_init() {
 
 
 int tildagon_mux_i2c_transaction(tildagon_mux_i2c_obj_t *self, uint16_t addr, size_t n, mp_machine_i2c_buf_t *bufs, unsigned int flags) {
-   
+
     int data_len = 0;
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+    // Diagnostics GPIO output to indicate I2C activity
+    gpio_set_direction(GPIO_NUM_11, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_11, 1);
 
     if (flags & MP_MACHINE_I2C_FLAG_WRITE1) {
         i2c_master_start(cmd);
@@ -128,6 +189,9 @@ int tildagon_mux_i2c_transaction(tildagon_mux_i2c_obj_t *self, uint16_t addr, si
     esp_err_t err = tca9548a_master_cmd_begin(self->mux, self->port, cmd, 100 * (3 + data_len) / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
 
+    // Diagnostics GPIO output to indicate I2C activity
+    gpio_set_level(GPIO_NUM_11, 0);
+
     if (err == ESP_FAIL) {
         return -MP_ENODEV;
     } else if (err == ESP_ERR_TIMEOUT) {
@@ -145,7 +209,7 @@ int tildagon_mux_i2c_transfer(mp_obj_base_t *self_in, uint16_t addr, size_t n, m
     if (addr == self->mux->addr) {
         return -MP_ENODEV;
     }
-    
+
     return tildagon_mux_i2c_transaction( self, addr, n, bufs, flags);
 }
 
