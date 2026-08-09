@@ -1,7 +1,7 @@
 import vfs
 from machine import I2C
 from system.hexpansion.util import (
-    detect_eeprom_addr,
+    # detect_eeprom_addr,
     get_hexpansion_block_devices,
     read_hexpansion_header,
     HexpansionHeader,
@@ -29,7 +29,7 @@ def populate_fb(h, addr_len):
     vfs.VfsLfs2.mkfs(partition)
 
 
-detected_frontboard = None
+detected_frontboard = 0x2400
 
 
 def detect_frontboard():
@@ -37,7 +37,8 @@ def detect_frontboard():
     if detected_frontboard is None:
         i2c = I2C(0)
 
-        addr, addr_len = detect_eeprom_addr(i2c)
+        # addr, addr_len = detect_eeprom_addr(i2c)
+        addr, addr_len = 0x50, 2
         if addr is not None and addr_len is not None:
             header = read_hexpansion_header(
                 i2c, addr, set_read_addr=True, addr_len=addr_len
@@ -45,7 +46,18 @@ def detect_frontboard():
 
             if header is None:
                 print("detecting frontboard with i2c")
-                devices = i2c.scan()
+                # devices = i2c.scan()
+                devices = []
+                try:
+                    if i2c.readfrom_mem(0x57, 0, 1, addrsize=16):
+                        devices.append(0x57)
+                except OSError:
+                    pass
+                try:
+                    if i2c.readfrom_mem(0x58, 0, 1, addrsize=16):
+                        devices.append(0x58)
+                except OSError:
+                    pass
                 if 0x58 in devices and 0x57 in devices:
                     header = HexpansionHeader(
                         manifest_version="2026",

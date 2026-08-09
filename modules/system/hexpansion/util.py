@@ -10,9 +10,53 @@ handle_insertion_lock = asyncio.Lock()
 
 
 def detect_eeprom_addr(i2c):
-    devices = i2c.scan()
+    # don't use scan - just try to read the first byte of the EEPROM at 0x50 and 0x57
+    devices = []
+
+    try:
+        if i2c.readfrom_mem(0x50, 0, 1, addrsize=16):
+            devices.append(0x50)
+    except OSError:
+        pass
+    try:
+        if i2c.readfrom_mem(0x57, 0, 1, addrsize=16):
+            devices.append(0x57)
+    except OSError:
+        pass
+
+    # devices = i2c.scan()
     if 0x57 in devices and 0x50 not in devices:
         return (0x57, 2)
+    try:
+        if i2c.readfrom_mem(0x51, 0, 1, addrsize=8):
+            devices.append(0x51)
+    except OSError:
+        pass
+    try:
+        if i2c.readfrom_mem(0x52, 0, 1, addrsize=8):
+            devices.append(0x52)
+    except OSError:
+        pass
+    try:
+        if i2c.readfrom_mem(0x53, 0, 1, addrsize=8):
+            devices.append(0x53)
+    except OSError:
+        pass
+    try:
+        if i2c.readfrom_mem(0x54, 0, 1, addrsize=8):
+            devices.append(0x54)
+    except OSError:
+        pass
+    try:
+        if i2c.readfrom_mem(0x55, 0, 1, addrsize=8):
+            devices.append(0x55)
+    except OSError:
+        pass
+    try:
+        if i2c.readfrom_mem(0x56, 0, 1, addrsize=8):
+            devices.append(0x56)
+    except OSError:
+        pass
     if (
         0x57 in devices
         and 0x56 in devices
@@ -44,12 +88,16 @@ def read_hexpansion_header(
 
     @return: A HexpansionHeader object if successful, otherwise None.
     """
-    devices = i2c.scan()
-    if eeprom_addr not in devices:
-        print(f"No device found at {hex(eeprom_addr)}")
-        return None
+    # devices = i2c.scan()
+    # if eeprom_addr not in devices:
+    #    print(f"No device found at {hex(eeprom_addr)}")
+    #    return None
 
-    header_bytes = i2c.readfrom_mem(eeprom_addr, 0, 32, addrsize=addr_len * 8)
+    try:
+        header_bytes = i2c.readfrom_mem(eeprom_addr, 0, 32, addrsize=addr_len * 8)
+    except OSError as e:
+        print(f"Failed to read from EEPROM at {hex(eeprom_addr)}: {e}")
+        return None
 
     try:
         header = HexpansionHeader.from_bytes(header_bytes)

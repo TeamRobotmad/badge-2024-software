@@ -49,7 +49,15 @@ class EEPROM(EepromDevice):
 
     # Check for a valid hardware configuration
     def scan(self, verbose, chip_size, addr, max_chips_count):
-        devices = self._i2c.scan()  # All devices on I2C bus
+        print("Scanning I2C bus for EEPROM devices...")
+        devices = []  # self._i2c.scan()  # All devices on I2C bus
+        for address in range(addr, addr + max_chips_count):
+            try:
+                if self._i2c.readfrom_mem(address, 0, 1, addrsize=8):
+                    devices.append(address)
+            except OSError:
+                pass
+
         eeproms = [
             d for d in devices if addr <= d < addr + max_chips_count
         ]  # EEPROM chips

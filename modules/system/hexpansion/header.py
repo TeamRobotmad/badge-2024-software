@@ -118,7 +118,10 @@ def write_header(port, header, addr=0x50, addr_len=2, page_size=32):
         write_addr = struct.pack(addr_pack, idx * page_size)
         print(f"Writing {len(chunk)} bytes at {idx * page_size}:", chunk)
 
-        i2c.writeto(addr, write_addr + chunk)
+        try:
+            i2c.writeto(addr, write_addr + chunk)
+        except OSError as e:
+            print(f"Failed to write to device at address {addr}: {e}")
 
         # Poll ACK
         while True:

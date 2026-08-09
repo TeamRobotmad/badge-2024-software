@@ -3,7 +3,7 @@
 
 
 #include "tca9548a.h"
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "extmod/modmachine.h"
 
 #if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
@@ -29,14 +29,16 @@
 #define TILDAGON_HX5_I2C_PORT (6)
 #define TILDAGON_SYS_I2C_PORT (7)
 
-
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
+#error "ESP-IDF v5.5 or later is required for the Tildagon Async I2C driver"
+#endif
 typedef struct _tildagon_mux_i2c_obj_t {
     mp_obj_base_t base;
-    const tca9548a_i2c_mux_t *mux;
+    tca9548a_i2c_mux_t *mux;
     tca9548a_i2c_port_t port;
 } tildagon_mux_i2c_obj_t;
 
-const tca9548a_i2c_mux_t *tildagon_get_i2c_mux();
+tca9548a_i2c_mux_t *tildagon_get_i2c_mux();
 
 tildagon_mux_i2c_obj_t *tildagon_get_mux_obj( uint8_t port );
 
