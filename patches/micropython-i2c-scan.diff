@@ -1,3 +1,28 @@
+diff --git a/docs/library/machine.I2C.rst b/docs/library/machine.I2C.rst
+index 635d58734..0cb6c4814 100644
+--- a/docs/library/machine.I2C.rst
++++ b/docs/library/machine.I2C.rst
+@@ -103,11 +103,16 @@ General Methods
+ 
+    Availability: WiPy.
+ 
+-.. method:: I2C.scan()
++.. method:: I2C.scan(addresses=None, /)
+ 
+-   Scan all I2C addresses between 0x08 and 0x77 inclusive and return a list of
+-   those that respond.  A device responds if it pulls the SDA line low after
+-   its address (including a write bit) is sent on the bus.
++   Scan the I2C bus and return a list of the addresses that respond.  A device
++   responds if it pulls the SDA line low after its address (including a write
++   bit) is sent on the bus.
++
++   By default all addresses between 0x08 and 0x77 inclusive are scanned.  If
++   *addresses* is given it must be an iterable of 7-bit addresses (for example a
++   `range` or list), and only those addresses are probed, which is faster when
++   only a subset is of interest.
+ 
+ Primitive I2C operations
+ ------------------------
 diff --git a/extmod/machine_i2c.c b/extmod/machine_i2c.c
 index bddf77529..0f7803ab6 100644
 --- a/extmod/machine_i2c.c
