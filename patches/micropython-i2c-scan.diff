@@ -1,5 +1,5 @@
 diff --git a/docs/library/machine.I2C.rst b/docs/library/machine.I2C.rst
-index 635d58734..0cb6c4814 100644
+index 635d58734..faab70045 100644
 --- a/docs/library/machine.I2C.rst
 +++ b/docs/library/machine.I2C.rst
 @@ -103,11 +103,16 @@ General Methods
@@ -17,17 +17,17 @@ index 635d58734..0cb6c4814 100644
 +   bit) is sent on the bus.
 +
 +   By default all addresses between 0x08 and 0x77 inclusive are scanned.  If
-+   *addresses* is given it must be an iterable of 7-bit addresses (for example a
-+   `range` or list), and only those addresses are probed, which is faster when
-+   only a subset is of interest.
++   *addresses* is given it may be a single 7-bit address, or an iterable of
++   7-bit addresses (for example a `range` or list), and only those addresses are
++   probed, which is faster when only a subset is of interest.
  
  Primitive I2C operations
  ------------------------
 diff --git a/extmod/machine_i2c.c b/extmod/machine_i2c.c
-index bddf77529..0f7803ab6 100644
+index bddf77529..0ec905423 100644
 --- a/extmod/machine_i2c.c
 +++ b/extmod/machine_i2c.c
-@@ -319,23 +319,37 @@ static mp_obj_t machine_i2c_init(size_t n_args, const mp_obj_t *args, mp_map_t *
+@@ -319,23 +319,46 @@ static mp_obj_t machine_i2c_init(size_t n_args, const mp_obj_t *args, mp_map_t *
  }
  MP_DEFINE_CONST_FUN_OBJ_KW(machine_i2c_init_obj, 1, machine_i2c_init);
  
@@ -54,16 +54,25 @@ index bddf77529..0f7803ab6 100644
 +            mp_event_handle_nowait();
 +        }
 +    } else {
-+        // Restrict the scan to the addresses produced by the supplied iterable (e.g. a range).
-+        mp_obj_iter_buf_t iter_buf;
-+        mp_obj_t iterable = mp_getiter(args[1], &iter_buf);
-+        mp_obj_t item;
-+        while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
-+            int ret = mp_machine_i2c_writeto(self, mp_obj_get_int(item), NULL, 0, true);
++        // Restrict the scan to a single integer address, or the addresses
++        // produced by the supplied iterable (e.g. a range or list).
++        if (mp_obj_is_int(args[1])) {
++            int ret = mp_machine_i2c_writeto(self, mp_obj_get_int(args[1]), NULL, 0, true);
 +            if (ret == 0) {
-+                mp_obj_list_append(list, item);
++                mp_obj_list_append(list, args[1]);
 +            }
 +            mp_event_handle_nowait();
++        } else {
++            mp_obj_iter_buf_t iter_buf;
++            mp_obj_t iterable = mp_getiter(args[1], &iter_buf);
++            mp_obj_t item;
++            while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
++                int ret = mp_machine_i2c_writeto(self, mp_obj_get_int(item), NULL, 0, true);
++                if (ret == 0) {
++                    mp_obj_list_append(list, item);
++                }
++                mp_event_handle_nowait();
++            }
          }
 -        // This scan loop may run for some time, so process any pending events/exceptions,
 -        // or allow the port to run any necessary background tasks.  But do it as fast as
