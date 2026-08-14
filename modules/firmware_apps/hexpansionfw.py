@@ -117,11 +117,20 @@ class HexpansionDetail:
             old_header = i2c.readfrom_mem(87, 0, 32, addrsize=16)
             print("Resetting frontboard")
             print(f"Old header: {old_header}")
+            # we need to ensure that the write has completed before we attempt autodetection, otherwise the chip will NAK the address and autodetection will fail.
             i2c.writeto(87, bytes([0, 0, 0, 0, 0, 0, 0, 0]))
+            while True:
+                try:
+                    # Send an empty write header to check if the device responds
+                    i2c.writeto(87, b"")
+                    break  # Chip responded with an ACK! It is ready for the next command.
+                except OSError:
+                    pass
+                finally:
+                    await asyncio.sleep_ms(1)
             frontboards.utils.detected_frontboard = None
             frontboard = frontboards.utils.detect_frontboard()
             print(f"Found frontboard {frontboard:04x}")
-            await asyncio.sleep(0.1)
             addr, addr_len = detect_eeprom_addr(i2c)
             self.header = read_hexpansion_header(i2c, addr, addr_len=addr_len)
             print(self.header)
