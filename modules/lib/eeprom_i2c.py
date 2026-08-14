@@ -115,7 +115,7 @@ class EEPROM(EepromDevice):
                     addrsize=self.addrsize,
                 )
             else:
-                self._i2c.writeto(self._i2c_addr, (vaddr, buf[start : start + npage]))
+                self._i2c.writevto(self._i2c_addr, (vaddr, buf[start : start + npage]))
                 self._wait_rdy()
             nbytes -= npage
             start += npage
