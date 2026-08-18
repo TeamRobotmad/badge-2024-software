@@ -158,7 +158,14 @@ cy8cmbr3116_config = [
 
 def cy8cmbr3116_init():
     top = I2C(0)
-    # top.scan() # what is this for?  it returns a list of devices on the bus, but we don't use it
+    scan_count = 0
+    while True:
+        scan = top.scan(0x37)
+        if 0x37 in scan:
+            break
+        scan_count += 1
+        if scan_count > 100:
+            raise Exception("cy8cmbr3116 not detected")
     device_crc = top.readfrom_mem(0x37, 0x7E, 2)
     # could look for a calibration file and alter the config to apply it
     config_crc = cy8cmbr_crc(cy8cmbr3116_config)
@@ -168,7 +175,7 @@ def cy8cmbr3116_init():
         top.writeto_mem(0x37, 0x86, bytes([0x02]))
         import time
 
-        time.sleep(0.5)
+        time.sleep_ms(500)
         # todo eliminate the sleep? it only happens when the ic needs configuring.
 
 
