@@ -51,7 +51,7 @@ class EEPROM(EepromDevice):
     def scan(self, verbose, chip_size, addr, max_chips_count):
         devices = self._i2c.scan(
             range(addr, addr + max_chips_count)
-        )  # All devices on I2C bus
+        )  # All potential EEPROM devices on I2C bus
         eeproms = [
             d for d in devices if addr <= d < addr + max_chips_count
         ]  # EEPROM chips

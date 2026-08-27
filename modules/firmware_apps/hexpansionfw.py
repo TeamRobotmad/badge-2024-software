@@ -121,7 +121,7 @@ class HexpansionDetail:
             i2c.writeto(87, bytes([0, 0, 0, 0, 0, 0, 0, 0]))
             while True:
                 try:
-                    # Send an empty write header to check if the device responds
+                    # Send an empty write to check if the device responds
                     i2c.writeto(87, b"")
                     break  # Chip responded with an ACK! It is ready for the next command.
                 except OSError:
