@@ -39,8 +39,14 @@ i2cfuncptr_t i2c_read[MAX_DEVICES] =
 
 updatefuncptr_t update[MAX_DEVICES] = 
 {
-    /* ST3M */    st3m_imu_task,
+    /* ST3M */    st3m_imu_task_fast,
     /* LSM6DS3 */ lsm6ds3_task,
+};
+
+updatefuncptr_t update_slow[MAX_DEVICES] =
+{
+    /* ST3M */    st3m_imu_task_slow,
+    /* LSM6DS3 */ NULL,
 };
 
 sensorfuncptr_t accel_read[MAX_DEVICES] =
@@ -218,11 +224,22 @@ void tildagon_imu_compass_read( float* x, float*y, float*z )
 void imu_run( void* data )
 {
     TickType_t last_wake = xTaskGetTickCount();
-    while (1) 
+    BaseType_t fast_slow_ratio_counter = 0;
+    while (1)
     {
-        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));  // 100 Hz
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(IMU_UPDATE_FAST_PERIOD_MS));  // 100 Hz
 
-        update[imu]();
+        update_fast[imu]();
+        if (--fast_slow_ratio_counter <= 0)
+        {
+            if (update_slow[imu] != NULL)
+            {
+                update_slow[imu]();
+            }
+            fast_slow_ratio_counter = IMU_UPDATE_FAST_SLOW_RATIO;
+        }
+
+        // Compass is on a different I2C multiplexed bus, so we do all activity with the IMU first
         if ( compass_funcptr != NULL )
         {
             compass_funcptr();

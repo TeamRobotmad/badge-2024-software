@@ -78,40 +78,48 @@ int st3m_imu_write(uint8_t reg_addr, uint8_t *reg_data, uint8_t len) {
     return bmi2_i2c_write(reg_addr, reg_data, len, &_imu );
 }
 
-void st3m_imu_task(void) {
-    
-    esp_err_t ret;
-    float a, b, c, temperature;
-    uint32_t steps;
+void st3m_imu_task_fast(void) {
 
-    ret = flow3r_bsp_imu_update(&_imu);
-    if (ret == ESP_OK) 
-    {    
+    esp_err_t ret;
+    float a, b, c;
+
+    ret = flow3r_bsp_imu_update(&_imu); // this does an I2C data transter
+    if (ret == ESP_OK)
+    {
         LOCK;
-        ret = flow3r_bsp_imu_read_acc_mps(&_imu, &a, &b, &c);
+        ret = flow3r_bsp_imu_read_acc_mps(&_imu, &a, &b, &c);   // this just reads the cached data from the last I2C transfer
         if (ret == ESP_OK) {
             _acc_x = a;
             _acc_y = b;
             _acc_z = c;
         }
 
-        ret = flow3r_bsp_imu_read_gyro_dps(&_imu, &a, &b, &c);
+        ret = flow3r_bsp_imu_read_gyro_dps(&_imu, &a, &b, &c);  // this just reads the cached data from the last I2C transfer
         if (ret == ESP_OK) {
             _gyro_x = a;
             _gyro_y = b;
             _gyro_z = c;
         }
+        UNLOCK;
+    }
+}
 
-        ret = flow3r_bsp_imu_read_steps(&_imu, &steps);
-        if (ret == ESP_OK) {
-            _steps = steps;
-        }
+void st3m_imu_task_slow(void) {
 
-        ret = flow3r_bsp_imu_read_temperature(&_imu, &temperature);
-        if (ret == ESP_OK) {
-            _temperature = temperature;
-        }
+    esp_err_t ret;
+    float a, b, c, temperature;
+    uint32_t steps;
 
+    ret = flow3r_bsp_imu_read_steps(&_imu, &steps); // this does an I2C data transfer to read the step count
+    if (ret == ESP_OK) {
+        LOCK;
+        _steps = steps;
+        UNLOCK;
+    }
+    ret = flow3r_bsp_imu_read_temperature(&_imu, &temperature); // this does an I2C data transfer to read the temperature
+    if (ret == ESP_OK) {
+        LOCK;
+        _temperature = temperature;
         UNLOCK;
     }
 }
