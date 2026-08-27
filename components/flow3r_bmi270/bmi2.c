@@ -1985,7 +1985,8 @@ int8_t bmi2_get_regs(uint8_t reg_addr, uint8_t *data, uint16_t len, struct bmi2_
         }
         else
         {
-            dev->delay_us(2, dev->intf_ptr);
+            /* Tildagon: requesting a tiny delay interacts with FreeRTOS scheduling and you actually get about 10mS, it works without the 2uS delay on ESP32-S3 */
+            /* dev->delay_us(2, dev->intf_ptr); */
         }
 
         if (dev->intf_rslt == BMI2_INTF_RET_SUCCESS)
@@ -5459,7 +5460,8 @@ int8_t bmi2_get_feat_config(uint8_t sw_page, uint8_t *feat_config, struct bmi2_d
         if (sw_page < dev->page_max)
         {
             /* Switch page */
-            rslt = bmi2_set_regs(BMI2_FEAT_PAGE_ADDR, &sw_page, 1, dev);
+            /* The Tildagon use of BMI270 never tries to access anything other than page 0, which is the device default page - so we can save I2C bus transfer by skipping the page switch */
+            rslt = BMI2_OK;     /* bmi2_set_regs(BMI2_FEAT_PAGE_ADDR, &sw_page, 1, dev); */
 
             /* If user length is less than feature length */
             if ((rslt == BMI2_OK) && (dev->read_write_len < BMI2_FEAT_SIZE_IN_BYTES))
