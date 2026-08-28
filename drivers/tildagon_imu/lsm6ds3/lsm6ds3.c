@@ -154,9 +154,9 @@ int lsm6ds3_read(uint8_t reg_addr, uint8_t *reg_data, uint8_t len )
 }
 
 /**
- * @brief update task fast
+ * @brief update task acc/gyro
  */
-void lsm6ds3_task_fast( void )
+void lsm6ds3_task_acc_gyro( void )
 {
     /* read temperature, gyro and accelerometer together to reduce i2c traffic */
     uint8_t write_buffer[1] = { OUT_GYRO_X_L };

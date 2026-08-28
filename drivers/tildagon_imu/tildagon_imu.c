@@ -32,10 +32,10 @@ i2cfuncptr_t i2c_read[MAX_DEVICES] =
     /* LSM6DS3 */ lsm6ds3_read,
 };
 
-updatefuncptr_t update_fast[MAX_DEVICES] =
+updatefuncptr_t update_acc_gyro[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_task_fast,
-    /* LSM6DS3 */ lsm6ds3_task_fast,
+    /* ST3M */    st3m_imu_task_acc_gyro,
+    /* LSM6DS3 */ lsm6ds3_task_acc_gyro,
 };
 
 updatefuncptr_t update_temperature[MAX_DEVICES] =
@@ -127,7 +127,7 @@ void tildagon_imu_init( void )
          * and only starts polling once something asks for a period (either
          * explicitly via set_period(), or implicitly on first read - see
          * tildagon_imu_ensure_active()). */
-        job_handle[IMU_GROUP_ACCEL_GYRO] = tildagon_i2c_mgr_register( update_fast[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
+        job_handle[IMU_GROUP_ACCEL_GYRO] = tildagon_i2c_mgr_register( update_acc_gyro[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
         job_handle[IMU_GROUP_TEMPERATURE] = tildagon_i2c_mgr_register( update_temperature[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
         job_handle[IMU_GROUP_STEPS] = tildagon_i2c_mgr_register( update_steps[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
     }

@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 extern int lsm6ds3_init( void );
-extern void lsm6ds3_task_fast( void );
+extern void lsm6ds3_task_acc_gyro( void );
 extern void lsm6ds3_task_temperature( void );
 extern void lsm6ds3_task_steps( void );
 extern void lsm6ds3_read_acc_mps(float *x, float *y, float *z);
