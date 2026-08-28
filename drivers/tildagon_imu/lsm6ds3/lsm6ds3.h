@@ -5,7 +5,8 @@
 
 extern int lsm6ds3_init( void );
 extern void lsm6ds3_task_fast( void );
-extern void lsm6ds3_task_slow( void );
+extern void lsm6ds3_task_temperature( void );
+extern void lsm6ds3_task_steps( void );
 extern void lsm6ds3_read_acc_mps(float *x, float *y, float *z);
 extern void lsm6ds3_read_gyro_dps(float *x, float *y, float *z);
 extern void lsm6ds3_read_steps(uint32_t *steps);

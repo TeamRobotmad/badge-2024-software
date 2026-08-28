@@ -5,6 +5,7 @@
 #include "py/runtime.h"
 #include "esp_err.h"
 #include <string.h>
+#include <stdbool.h>
 
 static mp_obj_t mp_imu_acc_read(void) {
     static float x, y, z;
@@ -115,6 +116,26 @@ static mp_obj_t mp_imu_write_to(mp_obj_t reg_address, mp_obj_t buffer ) {
 
 static MP_DEFINE_CONST_FUN_OBJ_2(mp_imu_write_to_obj, mp_imu_write_to);
 
+static mp_obj_t mp_imu_set_period(size_t n_args, const mp_obj_t *args) {
+    imu_group_t group = (imu_group_t)mp_obj_get_int(args[0]);
+    uint32_t period_ms = (args[1] == mp_const_none) ?
+        TILDAGON_I2C_MGR_PERIOD_OFF : (uint32_t)mp_obj_get_int(args[1]);
+    bool force = (n_args > 2) && mp_obj_is_true(args[2]);
+    return mp_obj_new_bool(tildagon_imu_set_period(group, period_ms, force));
+}
+
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_imu_set_period_obj, 2, 3, mp_imu_set_period);
+
+static mp_obj_t mp_imu_get_period(mp_obj_t group) {
+    uint32_t period_ms = tildagon_imu_get_period((imu_group_t)mp_obj_get_int(group));
+    if (period_ms == TILDAGON_I2C_MGR_PERIOD_OFF) {
+        return mp_const_none;
+    }
+    return mp_obj_new_int_from_uint(period_ms);
+}
+
+static MP_DEFINE_CONST_FUN_OBJ_1(mp_imu_get_period_obj, mp_imu_get_period);
+
 static const mp_rom_map_elem_t globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_acc_read), MP_ROM_PTR(&mp_imu_acc_read_obj) },
     { MP_ROM_QSTR(MP_QSTR_gyro_read), MP_ROM_PTR(&mp_imu_gyro_read_obj) },
@@ -125,6 +146,12 @@ static const mp_rom_map_elem_t globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_id), MP_ROM_PTR(&mp_imu_id_obj) },
     { MP_ROM_QSTR(MP_QSTR_readfrom), MP_ROM_PTR(&mp_imu_read_from_obj) },
     { MP_ROM_QSTR(MP_QSTR_writeto), MP_ROM_PTR(&mp_imu_write_to_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_period), MP_ROM_PTR(&mp_imu_set_period_obj) },
+    { MP_ROM_QSTR(MP_QSTR_get_period), MP_ROM_PTR(&mp_imu_get_period_obj) },
+    { MP_ROM_QSTR(MP_QSTR_GROUP_ACCEL_GYRO), MP_ROM_INT(IMU_GROUP_ACCEL_GYRO) },
+    { MP_ROM_QSTR(MP_QSTR_GROUP_TEMPERATURE), MP_ROM_INT(IMU_GROUP_TEMPERATURE) },
+    { MP_ROM_QSTR(MP_QSTR_GROUP_STEPS), MP_ROM_INT(IMU_GROUP_STEPS) },
+    { MP_ROM_QSTR(MP_QSTR_GROUP_COMPASS), MP_ROM_INT(IMU_GROUP_COMPASS) },
 };
 
 static MP_DEFINE_CONST_DICT(globals, globals_table);

@@ -8,7 +8,8 @@
 esp_err_t st3m_imu_init(void);
 
 extern void st3m_imu_task_fast(void);
-extern void st3m_imu_task_slow(void);
+extern void st3m_imu_task_temperature(void);
+extern void st3m_imu_task_steps(void);
 extern void st3m_imu_read_acc_mps(float *x, float *y, float *z);
 extern void st3m_imu_read_gyro_dps(float *x, float *y, float *z);
 extern void st3m_imu_read_pressure(float *pressure, float *temperature);

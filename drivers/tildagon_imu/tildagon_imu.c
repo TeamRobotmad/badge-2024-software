@@ -2,9 +2,6 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "py/mperrno.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "freertos/task.h"
 #include "st3m_imu.h"
 #include "lsm6ds3.h"
 
@@ -22,8 +19,6 @@ typedef void (*stepfuncptr_t) ( uint32_t* steps );
 typedef void (*stepresetfuncptr_t) ( void );
 typedef void (*tempfuncptr_t) ( float* temperature );
 typedef int  (*i2cfuncptr_t) ( uint8_t reg_addr, uint8_t *reg_data, uint8_t len );
-
-void imu_run( void* data );
 
 i2cfuncptr_t i2c_write[MAX_DEVICES] =
 {
@@ -43,10 +38,16 @@ updatefuncptr_t update_fast[MAX_DEVICES] =
     /* LSM6DS3 */ lsm6ds3_task_fast,
 };
 
-updatefuncptr_t update_slow[MAX_DEVICES] =
+updatefuncptr_t update_temperature[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_task_slow,
-    /* LSM6DS3 */ lsm6ds3_task_slow,
+    /* ST3M */    st3m_imu_task_temperature,
+    /* LSM6DS3 */ lsm6ds3_task_temperature,
+};
+
+updatefuncptr_t update_steps[MAX_DEVICES] =
+{
+    /* ST3M */    st3m_imu_task_steps,
+    /* LSM6DS3 */ lsm6ds3_task_steps,
 };
 
 sensorfuncptr_t accel_read[MAX_DEVICES] =
@@ -92,6 +93,23 @@ static char* id_list[MAX_DEVICES] =
 
 which_imu_t imu = MAX_DEVICES;
 
+/* Handles into the i2c manager's job table, one per sensor group; -1 means
+ * "not registered yet" (e.g. compass, before the frontboard registers it). */
+static int job_handle[IMU_NUM_GROUPS] = { -1, -1, -1, -1 };
+
+/* Auto-starts a group at a legacy default rate the first time it is read, if
+ * nothing has explicitly configured a period for it yet. This preserves
+ * behaviour for existing apps that just call e.g. acc_read() and expect
+ * regularly-updated data, without needing any per-app bookkeeping. */
+static void tildagon_imu_ensure_active( imu_group_t group, uint32_t legacy_period_ms )
+{
+    if ( job_handle[group] >= 0 &&
+         tildagon_i2c_mgr_get_period( job_handle[group] ) == TILDAGON_I2C_MGR_PERIOD_OFF )
+    {
+        tildagon_i2c_mgr_set_period( job_handle[group], legacy_period_ms, false );
+    }
+}
+
 void tildagon_imu_init( void )
 {
     if ( st3m_imu_init() == ESP_OK )
@@ -105,13 +123,19 @@ void tildagon_imu_init( void )
 
     if ( imu < MAX_DEVICES )
     {
-        /* create task */
-        xTaskCreate( imu_run, "imu", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
+        /* Register with the background i2c manager; every group starts off
+         * and only starts polling once something asks for a period (either
+         * explicitly via set_period(), or implicitly on first read - see
+         * tildagon_imu_ensure_active()). */
+        job_handle[IMU_GROUP_ACCEL_GYRO] = tildagon_i2c_mgr_register( update_fast[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
+        job_handle[IMU_GROUP_TEMPERATURE] = tildagon_i2c_mgr_register( update_temperature[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
+        job_handle[IMU_GROUP_STEPS] = tildagon_i2c_mgr_register( update_steps[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
     }
 }
 
 void tildagon_imu_acc_read( float* x, float*y, float*z )
 {
+    tildagon_imu_ensure_active( IMU_GROUP_ACCEL_GYRO, IMU_UPDATE_FAST_PERIOD_MS );
     if ( imu < MAX_DEVICES)
     {
         ( *accel_read[imu] )( x, y, z );
@@ -126,6 +150,7 @@ void tildagon_imu_acc_read( float* x, float*y, float*z )
 
 void tildagon_imu_gyro_read( float* x, float*y, float*z )
 {
+    tildagon_imu_ensure_active( IMU_GROUP_ACCEL_GYRO, IMU_UPDATE_FAST_PERIOD_MS );
     if ( imu < MAX_DEVICES)
     {
         ( *gyro_read[imu] )( x, y, z );
@@ -140,6 +165,7 @@ void tildagon_imu_gyro_read( float* x, float*y, float*z )
 
 void tildagon_imu_step_counter_read( uint32_t* steps )
 {
+    tildagon_imu_ensure_active( IMU_GROUP_STEPS, IMU_UPDATE_SLOW_PERIOD_MS );
     if ( imu < MAX_DEVICES)
     {
         ( *step_read[imu] )( steps );
@@ -160,6 +186,7 @@ void tildagon_imu_step_counter_reset( void )
 
 void tildagon_imu_temperature_read( float* temperature )
 {
+    tildagon_imu_ensure_active( IMU_GROUP_TEMPERATURE, IMU_UPDATE_SLOW_PERIOD_MS );
     if ( imu < MAX_DEVICES)
     {
         ( *temp_read[imu] )( temperature );
@@ -211,38 +238,32 @@ void tildagon_imu_register_compass( updatefuncptr_t compass_update, sensorfuncpt
 {
     compass_funcptr = compass_update;
     compass_readptr = compass_read;
+    job_handle[IMU_GROUP_COMPASS] = tildagon_i2c_mgr_register( compass_update, TILDAGON_I2C_MGR_PERIOD_OFF );
 }
 
 void tildagon_imu_compass_read( float* x, float*y, float*z )
 {
+    tildagon_imu_ensure_active( IMU_GROUP_COMPASS, IMU_UPDATE_FAST_PERIOD_MS );
     if ( compass_readptr != NULL )
     {
         compass_readptr( x, y, z );
     }
 }
 
-void imu_run( void* data )
+bool tildagon_imu_set_period( imu_group_t group, uint32_t period_ms, bool force )
 {
-    TickType_t last_wake = xTaskGetTickCount();
-    BaseType_t fast_slow_ratio_counter = 0;
-    while (1)
+    if ( group >= IMU_NUM_GROUPS || job_handle[group] < 0 )
     {
-        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(IMU_UPDATE_FAST_PERIOD_MS));  // 100 Hz
-
-        update_fast[imu]();
-        if (--fast_slow_ratio_counter <= 0)
-        {
-            if (update_slow[imu] != NULL)
-            {
-                update_slow[imu]();
-            }
-            fast_slow_ratio_counter = IMU_UPDATE_FAST_SLOW_RATIO;
-        }
-
-        // Compass is on a different I2C multiplexed bus, so we do all activity with the IMU first
-        if ( compass_funcptr != NULL )
-        {
-            compass_funcptr();
-        }
+        return false;
     }
+    return tildagon_i2c_mgr_set_period( job_handle[group], period_ms, force );
+}
+
+uint32_t tildagon_imu_get_period( imu_group_t group )
+{
+    if ( group >= IMU_NUM_GROUPS || job_handle[group] < 0 )
+    {
+        return TILDAGON_I2C_MGR_PERIOD_OFF;
+    }
+    return tildagon_i2c_mgr_get_period( job_handle[group] );
 }

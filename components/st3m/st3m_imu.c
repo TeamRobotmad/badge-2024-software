@@ -104,10 +104,9 @@ void st3m_imu_task_fast(void) {
     }
 }
 
-void st3m_imu_task_slow(void) {
+void st3m_imu_task_steps(void) {
 
     esp_err_t ret;
-    float a, b, c, temperature;
     uint32_t steps;
 
     ret = flow3r_bsp_imu_read_steps(&_imu, &steps); // this does an I2C data transfer to read the step count
@@ -116,6 +115,13 @@ void st3m_imu_task_slow(void) {
         _steps = steps;
         UNLOCK;
     }
+}
+
+void st3m_imu_task_temperature(void) {
+
+    esp_err_t ret;
+    float temperature;
+
     ret = flow3r_bsp_imu_read_temperature(&_imu, &temperature); // this does an I2C data transfer to read the temperature
     if (ret == ESP_OK) {
         LOCK;

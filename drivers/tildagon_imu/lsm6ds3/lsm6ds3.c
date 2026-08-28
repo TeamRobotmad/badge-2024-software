@@ -181,11 +181,10 @@ void lsm6ds3_task_fast( void )
 }
 
 /**
- * @brief update task slow
+ * @brief update task temperature
  */
-void lsm6ds3_task_slow( void )
+void lsm6ds3_task_temperature( void )
 {
-    /* read temperature, gyro and accelerometer together to reduce i2c traffic */
     uint8_t write_buffer[2] = { OUT_TEMP_L, 0x16 };
     uint8_t read_buffer[2] = { 0U };
     mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = write_buffer },
@@ -197,8 +196,18 @@ void lsm6ds3_task_slow( void )
         _temperature = (((float)((int16_t)(read_buffer[0] + ( (uint16_t)read_buffer[1] << 8 )))) * 0.001953125F) + 23.0F;
         UNLOCK;
     }
-    write_buffer[0] = STEP_COUNTER_L;
-    ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
+}
+
+/**
+ * @brief update task steps
+ */
+void lsm6ds3_task_steps( void )
+{
+    uint8_t write_buffer[2] = { STEP_COUNTER_L, 0x16 };
+    uint8_t read_buffer[2] = { 0U };
+    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = write_buffer },
+                                       { .len = 2, .buf = read_buffer } };
+    esp_err_t ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
     if (ret >= 0)
     {
         LOCK;
@@ -209,7 +218,6 @@ void lsm6ds3_task_slow( void )
         tildagon_mux_i2c_transaction( mux_port, ADDRESS, 1, buffer, WRITE );
         UNLOCK;
     }
-
 }
 
 /**

@@ -16,8 +16,8 @@ target_include_directories(usermod_tildagon_imu INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/lsm6ds3
     ${CMAKE_CURRENT_LIST_DIR}/qmc6309
     ${CMAKE_CURRENT_LIST_DIR}/../../components/st3m
+    ${CMAKE_CURRENT_LIST_DIR}/../tildagon_i2c_manager
 )
 
 # Link our INTERFACE library to the usermod target.
 target_link_libraries(usermod INTERFACE usermod_tildagon_imu)
-
