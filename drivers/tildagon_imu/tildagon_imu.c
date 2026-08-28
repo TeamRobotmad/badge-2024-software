@@ -11,7 +11,7 @@
 #include "tildagon_imu.h"
 
 typedef enum
-{ 
+{
     ST3M,
     LSM6DS3,
     /* add new imu type here */
@@ -37,16 +37,16 @@ i2cfuncptr_t i2c_read[MAX_DEVICES] =
     /* LSM6DS3 */ lsm6ds3_read,
 };
 
-updatefuncptr_t update[MAX_DEVICES] = 
+updatefuncptr_t update_fast[MAX_DEVICES] =
 {
     /* ST3M */    st3m_imu_task_fast,
-    /* LSM6DS3 */ lsm6ds3_task,
+    /* LSM6DS3 */ lsm6ds3_task_fast,
 };
 
 updatefuncptr_t update_slow[MAX_DEVICES] =
 {
     /* ST3M */    st3m_imu_task_slow,
-    /* LSM6DS3 */ NULL,
+    /* LSM6DS3 */ lsm6ds3_task_slow,
 };
 
 sensorfuncptr_t accel_read[MAX_DEVICES] =
@@ -84,7 +84,7 @@ static updatefuncptr_t compass_funcptr = NULL;
 
 static char st3m_id[]  = "bmi270";
 static char lsm6ds3_id[]  = "lsm6ds3";
-static char* id_list[MAX_DEVICES] = 
+static char* id_list[MAX_DEVICES] =
 {
     /* ST3M */     st3m_id,
     /* LSM6DS3 */  lsm6ds3_id,
@@ -102,7 +102,7 @@ void tildagon_imu_init( void )
     {
         imu = LSM6DS3;
     }
-    
+
     if ( imu < MAX_DEVICES )
     {
         /* create task */
