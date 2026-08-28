@@ -50,3 +50,6 @@ CONFIG_ESP32S3_DATA_CACHE_64KB=y
 
 CONFIG_MBEDTLS_SSL_ALPN=y
 CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+
+# 1ms tick, used by the i2c manager's scheduling loop and general system timing
+CONFIG_FREERTOS_HZ=1000
