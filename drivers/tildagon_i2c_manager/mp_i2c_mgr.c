@@ -131,7 +131,10 @@ MP_DEFINE_CONST_OBJ_TYPE(
     locals_dict, &i2c_mgr_job_locals_dict
     );
 
-/* i2c_mgr.add_job(port, addr, steps, period_ms=None)
+/* i2c_mgr.add_job(port, addr, steps, period_ms=None, high_priority=False)
+ *
+ * An active job is due immediately. Due high-priority jobs are dispatched
+ * before low-priority jobs, without interrupting an I2C transaction.
  *
  * steps is a tuple/list of step tuples:
  *   (i2c_mgr.READ,  reg, len)
@@ -141,12 +144,13 @@ MP_DEFINE_CONST_OBJ_TYPE(
  * Returns a Job object, or None if the job table is full. */
 static mp_obj_t i2c_mgr_add_job( size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args )
 {
-    enum { ARG_port, ARG_addr, ARG_steps, ARG_period_ms };
+    enum { ARG_port, ARG_addr, ARG_steps, ARG_period_ms, ARG_high_priority };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_port, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
         { MP_QSTR_addr, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
         { MP_QSTR_steps, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
         { MP_QSTR_period_ms, MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
+        { MP_QSTR_high_priority, MP_ARG_BOOL, {.u_bool = false} },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all( n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args );
@@ -226,7 +230,8 @@ static mp_obj_t i2c_mgr_add_job( size_t n_args, const mp_obj_t *pos_args, mp_map
     uint16_t period_ms = i2c_mgr_parse_period( args[ARG_period_ms].u_obj );
 
     int handle = tildagon_i2c_mgr_register_steps( (uint8_t)args[ARG_port].u_int, (uint8_t)args[ARG_addr].u_int,
-                                                   steps, (uint8_t)num_steps, period_ms );
+                                                   steps, (uint8_t)num_steps, period_ms,
+                                                   args[ARG_high_priority].u_bool );
     if ( handle < 0 )
     {
         return mp_const_none;

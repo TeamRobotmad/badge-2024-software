@@ -127,9 +127,9 @@ void tildagon_imu_init( void )
          * and only starts polling once something asks for a period (either
          * explicitly via set_period(), or implicitly on first read - see
          * tildagon_imu_ensure_active()). */
-        job_handle[IMU_GROUP_ACCEL_GYRO] = tildagon_i2c_mgr_register( update_acc_gyro[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
-        job_handle[IMU_GROUP_TEMPERATURE] = tildagon_i2c_mgr_register( update_temperature[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
-        job_handle[IMU_GROUP_STEPS] = tildagon_i2c_mgr_register( update_steps[imu], TILDAGON_I2C_MGR_PERIOD_OFF );
+        job_handle[IMU_GROUP_ACCEL_GYRO] = tildagon_i2c_mgr_register( update_acc_gyro[imu], TILDAGON_I2C_MGR_PERIOD_OFF, true );
+        job_handle[IMU_GROUP_TEMPERATURE] = tildagon_i2c_mgr_register( update_temperature[imu], TILDAGON_I2C_MGR_PERIOD_OFF, true );
+        job_handle[IMU_GROUP_STEPS] = tildagon_i2c_mgr_register( update_steps[imu], TILDAGON_I2C_MGR_PERIOD_OFF, true );
     }
 }
 
@@ -238,7 +238,7 @@ void tildagon_imu_register_compass( updatefuncptr_t compass_update, sensorfuncpt
 {
     compass_funcptr = compass_update;
     compass_readptr = compass_read;
-    job_handle[IMU_GROUP_COMPASS] = tildagon_i2c_mgr_register( compass_update, TILDAGON_I2C_MGR_PERIOD_OFF );
+    job_handle[IMU_GROUP_COMPASS] = tildagon_i2c_mgr_register( compass_update, TILDAGON_I2C_MGR_PERIOD_OFF, true );
 }
 
 void tildagon_imu_compass_read( float* x, float*y, float*z )

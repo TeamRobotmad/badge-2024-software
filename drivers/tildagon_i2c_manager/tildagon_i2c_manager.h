@@ -18,10 +18,6 @@
 /* Recurring jobs must not monopolise the shared I2C bus. */
 #define TILDAGON_I2C_MGR_MIN_PERIOD_MS (10U)
 
-/* Scheduling resolution of the manager's own background task. Relies on
- * CONFIG_FREERTOS_HZ being 1000 (1ms tick). */
-#define TILDAGON_I2C_MGR_TICK_MS    (1)
-
 /* Limits for generic step-based jobs (see tildagon_i2c_mgr_register_steps). */
 #define TILDAGON_I2C_MGR_MAX_STEPS      (5)
 #define TILDAGON_I2C_MGR_MAX_STEP_BYTES (4)
@@ -72,10 +68,13 @@ typedef struct
 extern void tildagon_i2c_mgr_init( void );
 
 /* Registers a new job with an initial period. A recurring period must be at
- * least TILDAGON_I2C_MGR_MIN_PERIOD_MS; use TILDAGON_I2C_MGR_PERIOD_OFF to
- * leave it idle. Returns a handle >= 0 on success, or -1 if the period is
- * invalid or the job table is full. */
-extern int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback, uint16_t period_ms );
+ * least TILDAGON_I2C_MGR_MIN_PERIOD_MS and is due immediately after
+ * registration; use TILDAGON_I2C_MGR_PERIOD_OFF to leave it idle. Due high
+ * priority jobs run before due low priority jobs, but do not interrupt a
+ * transaction already in progress. Returns a handle >= 0 on success, or -1
+ * if the period is invalid or the job table is full. */
+extern int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback,
+                                      uint16_t period_ms, bool high_priority );
 
 /* Registers a generic multi-step job (for hexpansion sensors etc.) that the
  * manager's background task executes directly - no per-sensor C code
@@ -86,10 +85,11 @@ extern int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback, uint16
  * are left untouched. Returns a handle >= 0 on success, or -1 if the job
  * table is full, num_steps is 0 or > TILDAGON_I2C_MGR_MAX_STEPS, or the
  * period is invalid, or the steps' total READ bytes exceed
- * TILDAGON_I2C_MGR_MAX_JOB_CACHE. */
+ * TILDAGON_I2C_MGR_MAX_JOB_CACHE. Scheduling follows the same immediate
+ * first execution and high-before-low rules as callback jobs. */
 extern int tildagon_i2c_mgr_register_steps( uint8_t port, uint8_t i2c_addr,
                                              const tildagon_i2c_mgr_step_t *steps, uint8_t num_steps,
-                                             uint16_t period_ms );
+                                             uint16_t period_ms, bool high_priority );
 
 /* Frees a job's slot so it can be reused by tildagon_i2c_mgr_register()/
  * tildagon_i2c_mgr_register_steps(). */
