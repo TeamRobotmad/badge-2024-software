@@ -78,7 +78,11 @@ int st3m_imu_write(uint8_t reg_addr, uint8_t *reg_data, uint8_t len) {
     return bmi2_i2c_write(reg_addr, reg_data, len, &_imu );
 }
 
-void st3m_imu_task_fast(void) {
+int st3m_imu_set_period(uint16_t period_ms) {
+    return flow3r_bsp_imu_set_period(&_imu, period_ms);
+}
+
+void st3m_imu_task_acc_gyro(void) {
 
     esp_err_t ret;
     float a, b, c;
@@ -104,10 +108,9 @@ void st3m_imu_task_fast(void) {
     }
 }
 
-void st3m_imu_task_slow(void) {
+void st3m_imu_task_steps(void) {
 
     esp_err_t ret;
-    float a, b, c, temperature;
     uint32_t steps;
 
     ret = flow3r_bsp_imu_read_steps(&_imu, &steps); // this does an I2C data transfer to read the step count
@@ -116,6 +119,13 @@ void st3m_imu_task_slow(void) {
         _steps = steps;
         UNLOCK;
     }
+}
+
+void st3m_imu_task_temperature(void) {
+
+    esp_err_t ret;
+    float temperature;
+
     ret = flow3r_bsp_imu_read_temperature(&_imu, &temperature); // this does an I2C data transfer to read the temperature
     if (ret == ESP_OK) {
         LOCK;
