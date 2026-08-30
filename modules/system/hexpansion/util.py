@@ -10,7 +10,7 @@ handle_insertion_lock = asyncio.Lock()
 
 
 def detect_eeprom_addr(i2c):
-    devices = i2c.scan()
+    devices = i2c.scan(range(0x50, 0x58))
     if 0x57 in devices and 0x50 not in devices:
         return (0x57, 2)
     if (
@@ -30,21 +30,18 @@ def detect_eeprom_addr(i2c):
 
 
 def read_hexpansion_header(
-    i2c, eeprom_addr=0x50, set_read_addr=True, addr_len=2
+    i2c, eeprom_addr=0x50, addr_len=2
 ) -> typing.Optional[HexpansionHeader]:
     """
     Read the hexpansion header from the EEPROM on the provided I2C bus, at the specified address.
 
     @param i2c: An object representing the I2C bus to read from.
     @param eeprom_addr: The address of the EEPROM on the I2C bus. Defaults to 0x50.
-    @param set_read_addr: If True, attempts to set the read address before reading.
-            Use with caution, as it might overwrite the first byte accidentally on some EEPROMs.
-            Defaults to False.
     @param addr_len: The amount of bytes to use for setting the read address.
 
     @return: A HexpansionHeader object if successful, otherwise None.
     """
-    devices = i2c.scan()
+    devices = i2c.scan(eeprom_addr)
     if eeprom_addr not in devices:
         print(f"No device found at {hex(eeprom_addr)}")
         return None

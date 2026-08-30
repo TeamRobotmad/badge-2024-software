@@ -105,7 +105,7 @@ CY8CMBRX_SCRATCHPAD0 = 0x00
 CY8CMBRX_SCRATCHPAD1 = 0x00
 
 # follow section 6 of https://www.infineon.com/assets/row/public/documents/30/42/infineon-an90071-cy8cmbr3xxx-capsenser-design-guide-applicationnotes-en.pdf
-# to configure this. 
+# to configure this.
 cy8cmbr3116_config = [
 CY8CMBRX_CS0_ENABLE | CY8CMBRX_CS1_ENABLE | CY8CMBRX_CS2_ENABLE | CY8CMBRX_CS3_ENABLE | CY8CMBRX_CS4_ENABLE | CY8CMBRX_CS5_ENABLE | CY8CMBRX_CS6_ENABLE | CY8CMBRX_CS7_ENABLE, #0x00 SENSOR_EN LSB
 CY8CMBRX_CS8_ENABLE | CY8CMBRX_CS9_ENABLE | CY8CMBRX_CS10_ENABLE | CY8CMBRX_CS11_ENABLE | CY8CMBRX_CS12_ENABLE | CY8CMBRX_CS13_ENABLE | CY8CMBRX_CS14_ENABLE, #0x01 SENSOR_EN MSB
@@ -153,7 +153,7 @@ CY8CMBRX_CS0_ENABLE | CY8CMBRX_CS1_ENABLE, #0x26 PROX_EN
 0x02, #0x2B PROX_TOUCH_TH0 MSB
 0x00, #0x2C PROX_TOUCH_TH1 LSB
 0x02, #0x2D PROX_TOUCH_TH1 MSB
-CY8CMBRX_RES_16_BIT, #0x2E PROX_RESOLUTION0 left
+CY8CMBRX_RES_15_BIT, #0x2E PROX_RESOLUTION0 left
 CY8CMBRX_RES_15_BIT, #0x2F PROX_RESOLUTION1 right
 0x00, #0x30 PROX_HYS
 0x00, #0x31 NOT USED
@@ -183,7 +183,7 @@ CY8CMBRX_RES_15_BIT, #0x2F PROX_RESOLUTION1 right
 0x00, #0x49 NOT USED
 0x00, #0x4A NOT USED
 0x00, #0x4B NOT USED
-0x00, #0x4C SPO_CFG
+CY8CMBRX.SPO0_INTTERUPT, #0x4C SPO_CFG
 CY8CMBRX_IIR_EN, #0x4D DEVICE_CFG0
 CY8CMBRX_SYSD_EN, #0x4E DEVICE_CFG1
 CY8CMBRX_ATH_EN | CY8CMBRX_GUARD_EN, #0x4F DEVICE_CFG2
@@ -239,7 +239,14 @@ CY8CMBRX_ATH_EN | CY8CMBRX_GUARD_EN, #0x4F DEVICE_CFG2
 
 def cy8cmbr3116_init():
     top = I2C(0)
-    top.scan()
+    scan_count = 0
+    while True:
+        scan = top.scan(0x37)
+        if 0x37 in scan:
+            break
+        scan_count += 1
+        if scan_count > 100:
+            raise Exception("cy8cmbr3116 not detected")
     device_crc = top.readfrom_mem(0x37, 0x7E, 2)
     # could look for a calibration file and alter the config to apply it
     config_crc = cy8cmbr_crc(cy8cmbr3116_config)

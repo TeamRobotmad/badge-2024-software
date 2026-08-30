@@ -9,7 +9,7 @@ class Pin:
     def __init__(self, *args, **kwargs):
         pass
 
-    def value(self):
+    def value(self, value=None):
         return 1
 
     def on(self):
@@ -18,6 +18,19 @@ class Pin:
     def off(self):
         pass
 
+
+class Timer:
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+class PWM:
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def duty_u16(self, *args, **kwargs):
+        pass
 
 class ADC:
     ATTN_11DB = None
@@ -34,7 +47,7 @@ class I2C:
     def __init__(self, *args, **kwargs):
         pass
 
-    def scan(self):
+    def scan(self, *args, **kwargs):
         return []
 
     def writeto(self, *args, **kwargs):
@@ -50,6 +63,24 @@ class I2C:
 class SPI:
     pass
 
+
+class UART:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def read(self, *args, **kwargs):
+        return b''
+
+    def write(self, *args, **kwargs):
+        return 0
+
+    def any(self):
+        return 0
+
+    def deinit(self):
+        pass
+
+
 def reset():
     print("beep boop i have reset")
     os.execv(sys.executable, ["python"] + sys.argv)
@@ -63,3 +94,8 @@ def disk_mode_flash():
 def disk_mode_sd():
     print("beep boop i'm now in sd card disk mode")
     sys.exit(0)
+
+#Added for use by BadgeBot
+def disable_irq() -> int: ...
+
+def enable_irq(_state: int) -> None: ...

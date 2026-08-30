@@ -22,6 +22,8 @@ led_colours = [
 
 
 class _tildagonos:
+    leds: neopixel.ComposedNeoPixel
+
     def __init__(self):
         self.leds = neopixel.ComposedNeoPixel(neopixel.NeoPixel(Pin(21), 19))
 

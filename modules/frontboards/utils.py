@@ -39,13 +39,11 @@ def detect_frontboard():
 
         addr, addr_len = detect_eeprom_addr(i2c)
         if addr is not None and addr_len is not None:
-            header = read_hexpansion_header(
-                i2c, addr, set_read_addr=True, addr_len=addr_len
-            )
+            header = read_hexpansion_header(i2c, addr, addr_len=addr_len)
 
             if header is None:
                 print("detecting frontboard with i2c")
-                devices = i2c.scan()
+                devices = i2c.scan(range(0x57, 0x59))
                 if 0x58 in devices and 0x57 in devices:
                     header = HexpansionHeader(
                         manifest_version="2026",
@@ -66,7 +64,7 @@ def detect_frontboard():
                         vid=0xBAD3,
                         pid=0x2400,
                         unique_id=0x0,
-                        friendly_name="TwentyTwentyFour",
+                        friendly_name="Tildagon",
                     )
                 populate_fb(header, 2)
             detected_frontboard = header.pid

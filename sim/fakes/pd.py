@@ -7,6 +7,9 @@ class Host:
     
     def send_vendor_msg(self, data):
         pass
+
+    def send_badge_id(self):
+        pass
     
     
 class Device:

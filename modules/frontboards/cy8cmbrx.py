@@ -71,7 +71,7 @@ cy8cmbr3116_config = [
     0x02,  # 0x2B PROX.TOUCH_TH0 MSB
     0x00,  # 0x2C PROX.TOUCH_TH1 LSB
     0x02,  # 0x2D PROX.TOUCH_TH1 MSB
-    CY8CMBRX.RES_16_BIT,  # 0x2E PROX.RESOLUTION0
+    CY8CMBRX.RES_15_BIT,  # 0x2E PROX.RESOLUTION0
     CY8CMBRX.RES_15_BIT,  # 0x2F PROX.RESOLUTION1
     0x00,  # 0x30 PROX.HYS
     0x00,  # 0x31 NOT USED
@@ -101,7 +101,7 @@ cy8cmbr3116_config = [
     0x00,  # 0x49 NOT USED
     0x00,  # 0x4A NOT USED
     0x00,  # 0x4B NOT USED
-    0x00,  # 0x4C SPO_CFG
+    CY8CMBRX.SPO0_INTTERUPT,  # 0x4C SPO_CFG
     CY8CMBRX.IIR_EN,  # 0x4D DEVICE_CFG0
     CY8CMBRX.SYSD_EN,  # 0x4E DEVICE_CFG1
     CY8CMBRX.ATH_EN | CY8CMBRX.GUARD_EN,  # 0x4F DEVICE_CFG2
@@ -158,7 +158,14 @@ cy8cmbr3116_config = [
 
 def cy8cmbr3116_init():
     top = I2C(0)
-    top.scan()
+    scan_count = 0
+    while True:
+        scan = top.scan(0x37)
+        if 0x37 in scan:
+            break
+        scan_count += 1
+        if scan_count > 100:
+            raise Exception("cy8cmbr3116 not detected")
     device_crc = top.readfrom_mem(0x37, 0x7E, 2)
     # could look for a calibration file and alter the config to apply it
     config_crc = cy8cmbr_crc(cy8cmbr3116_config)
@@ -168,7 +175,7 @@ def cy8cmbr3116_init():
         top.writeto_mem(0x37, 0x86, bytes([0x02]))
         import time
 
-        time.sleep(0.5)
+        time.sleep_ms(500)
         # todo eliminate the sleep? it only happens when the ic needs configuring.
 
 

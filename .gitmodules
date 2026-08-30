@@ -1,3 +1,14 @@
 [submodule "micropython"]
 	path = micropython
 	url = https://github.com/micropython/micropython.git
+[submodule "sim/apps/BadgeBot"]
+	path = sim/apps/BadgeBot
+	url = https://github.com/TeamRobotmad/BadgeBot.git
+[submodule "sim/apps/HexManager"]
+	path = sim/apps/HexManager
+	url = https://github.com/TeamRobotmad/HexManager.git
+	branch = main
+[submodule "sim/apps/EMFBadge-Hexpansions-GPS"]
+	path = sim/apps/EMFBadge-Hexpansions-GPS
+	url = https://github.com/Robotmad/EMFBadge-Hexpansions-GPS.git
+	branch = main
