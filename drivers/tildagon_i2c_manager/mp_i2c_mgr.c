@@ -10,6 +10,22 @@ typedef struct _i2c_mgr_job_obj_t {
     int handle;
 } i2c_mgr_job_obj_t;
 
+static uint16_t i2c_mgr_parse_period( mp_obj_t period_in )
+{
+    if ( period_in == MP_OBJ_NULL || period_in == mp_const_none )
+    {
+        return TILDAGON_I2C_MGR_PERIOD_OFF;
+    }
+
+    mp_int_t period_ms = mp_obj_get_int( period_in );
+    if ( period_ms < (mp_int_t)TILDAGON_I2C_MGR_MIN_PERIOD_MS ||
+            period_ms > (mp_int_t)TILDAGON_I2C_MGR_MAX_PERIOD_MS )
+    {
+        mp_raise_ValueError( MP_ERROR_TEXT("period must be None or 10..65534 ms") );
+    }
+    return (uint16_t)period_ms;
+}
+
 static mp_obj_t i2c_mgr_job_read_into( mp_obj_t self_in, mp_obj_t buf_in )
 {
     i2c_mgr_job_obj_t *self = MP_OBJ_TO_PTR( self_in );
@@ -37,8 +53,7 @@ static mp_obj_t i2c_mgr_job_set_period( size_t n_args, const mp_obj_t *pos_args,
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all( n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args );
 
-    uint32_t period_ms = ( args[ARG_period_ms].u_obj == mp_const_none ) ?
-        TILDAGON_I2C_MGR_PERIOD_OFF : (uint32_t)mp_obj_get_int( args[ARG_period_ms].u_obj );
+    uint16_t period_ms = i2c_mgr_parse_period( args[ARG_period_ms].u_obj );
     bool force = args[ARG_force].u_bool;
     return mp_obj_new_bool( tildagon_i2c_mgr_set_period( self->handle, period_ms, force ) );
 }
@@ -47,7 +62,7 @@ static MP_DEFINE_CONST_FUN_OBJ_KW( i2c_mgr_job_set_period_obj, 2, i2c_mgr_job_se
 static mp_obj_t i2c_mgr_job_get_period( mp_obj_t self_in )
 {
     i2c_mgr_job_obj_t *self = MP_OBJ_TO_PTR( self_in );
-    uint32_t period_ms = tildagon_i2c_mgr_get_period( self->handle );
+    uint16_t period_ms = tildagon_i2c_mgr_get_period( self->handle );
     if ( period_ms == TILDAGON_I2C_MGR_PERIOD_OFF )
     {
         return mp_const_none;
@@ -55,6 +70,36 @@ static mp_obj_t i2c_mgr_job_get_period( mp_obj_t self_in )
     return mp_obj_new_int_from_uint( period_ms );
 }
 static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_job_get_period_obj, i2c_mgr_job_get_period );
+
+static mp_obj_t i2c_mgr_job_run_once( mp_obj_t self_in )
+{
+    i2c_mgr_job_obj_t *self = MP_OBJ_TO_PTR( self_in );
+    int16_t attempt = tildagon_i2c_mgr_run_once( self->handle );
+    if ( attempt < 0 )
+    {
+        return mp_const_none;
+    }
+    return mp_obj_new_int( attempt );
+}
+static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_job_run_once_obj, i2c_mgr_job_run_once );
+
+static mp_obj_t i2c_mgr_job_get_status( mp_obj_t self_in )
+{
+    i2c_mgr_job_obj_t *self = MP_OBJ_TO_PTR( self_in );
+    uint8_t attempt;
+    uint8_t status;
+    if ( !tildagon_i2c_mgr_get_status( self->handle, &attempt, &status ) )
+    {
+        return mp_const_none;
+    }
+
+    mp_obj_t result[2] = {
+        mp_obj_new_int( attempt ),
+        mp_obj_new_int( status ),
+    };
+    return mp_obj_new_tuple( 2, result );
+}
+static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_job_get_status_obj, i2c_mgr_job_get_status );
 
 static mp_obj_t i2c_mgr_job_unregister( mp_obj_t self_in )
 {
@@ -72,6 +117,8 @@ static const mp_rom_map_elem_t i2c_mgr_job_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_read_into), MP_ROM_PTR(&i2c_mgr_job_read_into_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_period), MP_ROM_PTR(&i2c_mgr_job_set_period_obj) },
     { MP_ROM_QSTR(MP_QSTR_get_period), MP_ROM_PTR(&i2c_mgr_job_get_period_obj) },
+    { MP_ROM_QSTR(MP_QSTR_run_once), MP_ROM_PTR(&i2c_mgr_job_run_once_obj) },
+    { MP_ROM_QSTR(MP_QSTR_get_status), MP_ROM_PTR(&i2c_mgr_job_get_status_obj) },
     { MP_ROM_QSTR(MP_QSTR_unregister), MP_ROM_PTR(&i2c_mgr_job_unregister_obj) },
 };
 static MP_DEFINE_CONST_DICT( i2c_mgr_job_locals_dict, i2c_mgr_job_locals_dict_table );
@@ -104,6 +151,15 @@ static mp_obj_t i2c_mgr_add_job( size_t n_args, const mp_obj_t *pos_args, mp_map
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all( n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args );
 
+    if ( args[ARG_port].u_int < 0 || args[ARG_port].u_int > 7 )
+    {
+        mp_raise_ValueError( MP_ERROR_TEXT("port must be 0..7") );
+    }
+    if ( args[ARG_addr].u_int < 0 || args[ARG_addr].u_int > 0x7f )
+    {
+        mp_raise_ValueError( MP_ERROR_TEXT("address must be 7-bit") );
+    }
+
     size_t num_steps;
     mp_obj_t *step_items;
     mp_obj_get_array( args[ARG_steps].u_obj, &num_steps, &step_items );
@@ -127,9 +183,16 @@ static mp_obj_t i2c_mgr_add_job( size_t n_args, const mp_obj_t *pos_args, mp_map
         }
 
         mp_int_t type = mp_obj_get_int( item[0] );
+        mp_int_t a = mp_obj_get_int( item[1] );
+        mp_int_t b = mp_obj_get_int( item[2] );
+        if ( type < TILDAGON_I2C_MGR_STEP_READ || type > TILDAGON_I2C_MGR_STEP_CHECK ||
+             a < 0 || a > UINT8_MAX || b < 0 || b > UINT8_MAX )
+        {
+            mp_raise_ValueError( MP_ERROR_TEXT("invalid step field") );
+        }
         steps[i].type = (uint8_t)type;
-        steps[i].a = (uint8_t)mp_obj_get_int( item[1] );
-        steps[i].b = (uint8_t)mp_obj_get_int( item[2] );
+        steps[i].a = (uint8_t)a;
+        steps[i].b = (uint8_t)b;
 
         if ( type == TILDAGON_I2C_MGR_STEP_WRITE )
         {
@@ -151,14 +214,18 @@ static mp_obj_t i2c_mgr_add_job( size_t n_args, const mp_obj_t *pos_args, mp_map
             {
                 mp_raise_ValueError( MP_ERROR_TEXT("check step needs a value") );
             }
-            steps[i].data[0] = (uint8_t)mp_obj_get_int( item[3] );
+            mp_int_t value = mp_obj_get_int( item[3] );
+            if ( value < 0 || value > UINT8_MAX )
+            {
+                mp_raise_ValueError( MP_ERROR_TEXT("check value must be 0..255") );
+            }
+            steps[i].data[0] = (uint8_t)value;
         }
     }
 
-    uint32_t period_ms = ( args[ARG_period_ms].u_obj == MP_OBJ_NULL || args[ARG_period_ms].u_obj == mp_const_none ) ?
-        TILDAGON_I2C_MGR_PERIOD_OFF : (uint32_t)mp_obj_get_int( args[ARG_period_ms].u_obj );
+    uint16_t period_ms = i2c_mgr_parse_period( args[ARG_period_ms].u_obj );
 
-    int handle = tildagon_i2c_mgr_register_steps( (uint8_t)args[ARG_port].u_int, (uint16_t)args[ARG_addr].u_int,
+    int handle = tildagon_i2c_mgr_register_steps( (uint8_t)args[ARG_port].u_int, (uint8_t)args[ARG_addr].u_int,
                                                    steps, (uint8_t)num_steps, period_ms );
     if ( handle < 0 )
     {
@@ -177,6 +244,12 @@ static const mp_rom_map_elem_t i2c_mgr_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_WRITE), MP_ROM_INT(TILDAGON_I2C_MGR_STEP_WRITE) },
     { MP_ROM_QSTR(MP_QSTR_CHECK), MP_ROM_INT(TILDAGON_I2C_MGR_STEP_CHECK) },
     { MP_ROM_QSTR(MP_QSTR_OFF), MP_ROM_INT(TILDAGON_I2C_MGR_PERIOD_OFF) },
+    { MP_ROM_QSTR(MP_QSTR_MIN_PERIOD_MS), MP_ROM_INT(TILDAGON_I2C_MGR_MIN_PERIOD_MS) },
+    { MP_ROM_QSTR(MP_QSTR_STATUS_IDLE), MP_ROM_INT(TILDAGON_I2C_MGR_STATUS_IDLE) },
+    { MP_ROM_QSTR(MP_QSTR_STATUS_PENDING), MP_ROM_INT(TILDAGON_I2C_MGR_STATUS_PENDING) },
+    { MP_ROM_QSTR(MP_QSTR_STATUS_SUCCESS), MP_ROM_INT(TILDAGON_I2C_MGR_STATUS_SUCCESS) },
+    { MP_ROM_QSTR(MP_QSTR_STATUS_CHECK_ABORTED), MP_ROM_INT(TILDAGON_I2C_MGR_STATUS_CHECK_ABORTED) },
+    { MP_ROM_QSTR(MP_QSTR_STATUS_I2C_ERROR), MP_ROM_INT(TILDAGON_I2C_MGR_STATUS_I2C_ERROR) },
 };
 static MP_DEFINE_CONST_DICT( i2c_mgr_globals, i2c_mgr_globals_table );
 

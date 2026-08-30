@@ -128,8 +128,15 @@ static mp_obj_t mp_imu_set_period(size_t n_args, const mp_obj_t *pos_args, mp_ma
     mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
     imu_group_t group = (imu_group_t)args[ARG_group].u_int;
-    uint32_t period_ms = (args[ARG_period_ms].u_obj == mp_const_none) ?
-        TILDAGON_I2C_MGR_PERIOD_OFF : (uint32_t)mp_obj_get_int(args[ARG_period_ms].u_obj);
+    uint16_t period_ms = TILDAGON_I2C_MGR_PERIOD_OFF;
+    if (args[ARG_period_ms].u_obj != mp_const_none) {
+        mp_int_t requested_period = mp_obj_get_int(args[ARG_period_ms].u_obj);
+        if (requested_period < (mp_int_t)TILDAGON_I2C_MGR_MIN_PERIOD_MS ||
+            requested_period > (mp_int_t)TILDAGON_I2C_MGR_MAX_PERIOD_MS) {
+            mp_raise_ValueError(MP_ERROR_TEXT("period must be None or 10..65534 ms"));
+        }
+        period_ms = (uint16_t)requested_period;
+    }
     bool force = args[ARG_force].u_bool;
     return mp_obj_new_bool(tildagon_imu_set_period(group, period_ms, force));
 }
@@ -137,7 +144,7 @@ static mp_obj_t mp_imu_set_period(size_t n_args, const mp_obj_t *pos_args, mp_ma
 static MP_DEFINE_CONST_FUN_OBJ_KW(mp_imu_set_period_obj, 2, mp_imu_set_period);
 
 static mp_obj_t mp_imu_get_period(mp_obj_t group) {
-    uint32_t period_ms = tildagon_imu_get_period((imu_group_t)mp_obj_get_int(group));
+    uint16_t period_ms = tildagon_imu_get_period((imu_group_t)mp_obj_get_int(group));
     if (period_ms == TILDAGON_I2C_MGR_PERIOD_OFF) {
         return mp_const_none;
     }

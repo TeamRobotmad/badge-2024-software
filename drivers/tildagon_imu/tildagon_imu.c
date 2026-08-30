@@ -101,7 +101,7 @@ static int job_handle[IMU_NUM_GROUPS] = { -1, -1, -1, -1 };
  * nothing has explicitly configured a period for it yet. This preserves
  * behaviour for existing apps that just call e.g. acc_read() and expect
  * regularly-updated data, without needing any per-app bookkeeping. */
-static void tildagon_imu_ensure_active( imu_group_t group, uint32_t legacy_period_ms )
+static void tildagon_imu_ensure_active( imu_group_t group, uint16_t legacy_period_ms )
 {
     if ( job_handle[group] >= 0 &&
          tildagon_i2c_mgr_get_period( job_handle[group] ) == TILDAGON_I2C_MGR_PERIOD_OFF )
@@ -250,7 +250,7 @@ void tildagon_imu_compass_read( float* x, float*y, float*z )
     }
 }
 
-bool tildagon_imu_set_period( imu_group_t group, uint32_t period_ms, bool force )
+bool tildagon_imu_set_period( imu_group_t group, uint16_t period_ms, bool force )
 {
     if ( group >= IMU_NUM_GROUPS || job_handle[group] < 0 )
     {
@@ -259,7 +259,7 @@ bool tildagon_imu_set_period( imu_group_t group, uint32_t period_ms, bool force 
     return tildagon_i2c_mgr_set_period( job_handle[group], period_ms, force );
 }
 
-uint32_t tildagon_imu_get_period( imu_group_t group )
+uint16_t tildagon_imu_get_period( imu_group_t group )
 {
     if ( group >= IMU_NUM_GROUPS || job_handle[group] < 0 )
     {
