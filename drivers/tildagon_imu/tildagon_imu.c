@@ -81,7 +81,6 @@ tempfuncptr_t temp_read[MAX_DEVICES] =
 };
 
 static sensorfuncptr_t compass_readptr = NULL;
-static updatefuncptr_t compass_funcptr = NULL;
 
 static char st3m_id[]  = "bmi270";
 static char lsm6ds3_id[]  = "lsm6ds3";
@@ -234,11 +233,10 @@ int tildagon_imu_read( uint8_t address, uint8_t length, uint8_t* buffer )
     }
 }
 
-void tildagon_imu_register_compass( updatefuncptr_t compass_update, sensorfuncptr_t compass_read )
+void tildagon_imu_register_compass( int compass_job_handle, sensorfuncptr_t compass_read )
 {
-    compass_funcptr = compass_update;
     compass_readptr = compass_read;
-    job_handle[IMU_GROUP_COMPASS] = tildagon_i2c_mgr_register( compass_update, TILDAGON_I2C_MGR_PERIOD_OFF, true );
+    job_handle[IMU_GROUP_COMPASS] = compass_job_handle;
 }
 
 void tildagon_imu_compass_read( float* x, float*y, float*z )

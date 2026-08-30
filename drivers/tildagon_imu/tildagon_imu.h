@@ -33,7 +33,7 @@ extern void tildagon_imu_temperature_read( float* temperature );
 extern char* tildagon_imu_get_id( void );
 extern int tildagon_imu_write( uint8_t address, uint8_t length, uint8_t* buffer );
 extern int tildagon_imu_read( uint8_t address, uint8_t length, uint8_t* buffer );
-extern void tildagon_imu_register_compass( updatefuncptr_t compass_update, sensorfuncptr_t compass_read );
+extern void tildagon_imu_register_compass( int compass_job_handle, sensorfuncptr_t compass_read );
 extern void tildagon_imu_compass_read( float* x, float*y, float*z );
 
 /* Requests a new update period (in ms) for a sensor group. Recurring periods
