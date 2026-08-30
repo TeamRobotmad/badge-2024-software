@@ -12,6 +12,7 @@
 typedef struct {
     struct bmi2_dev bmi;
     uint8_t bmi_dev_addr;
+    uint8_t odr;        // shared accelerometer and gyroscope output data rate.
     int acc_range;   // accelerometer range in g.
     int gyro_range;  // gyroscope range in degrees per second.
 } flow3r_bsp_imu_t;
@@ -19,10 +20,14 @@ typedef struct {
 // Init the IMU with default settings
 //
 // Configures the IMU to:
-// Accelerometer: 100 Hz sample rate, 2 g range
-// Gyroscope: 100 Hz sample rate, 200 dps range
+// Accelerometer: 25 Hz sample rate, 2 g range
+// Gyroscope: 25 Hz sample rate, 2000 dps range
 // Pressure sensor: 50 Hz sample rate
 esp_err_t flow3r_bsp_imu_init(flow3r_bsp_imu_t *imu);
+
+// Select the closest supported accelerometer and gyroscope ODR for a polling period.
+esp_err_t flow3r_bsp_imu_set_period(flow3r_bsp_imu_t *imu,
+                                    uint16_t period_ms);
 
 // Update the IMU readings by reading data from the I2C bus.
 //
@@ -86,6 +91,6 @@ BMI2_INTF_RETURN_TYPE bmi2_i2c_write(uint8_t reg_addr,const uint8_t *reg_data,
                                             uint32_t len, void *intf_ptr);
 // i2c read
 // reads buffer from register address
-// Returns bmi fault code                                            
+// Returns bmi fault code
 BMI2_INTF_RETURN_TYPE bmi2_i2c_read(uint8_t reg_addr, uint8_t *reg_data,
                                            uint32_t len, void *intf_ptr);

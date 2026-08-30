@@ -21,8 +21,7 @@ static const char *TAG = "flow3r-imu";
 #define GRAVITY_EARTH (9.80665f)
 
 static void bmi2_error_codes_print_result(int8_t rslt);
-static int8_t set_accel_config(flow3r_bsp_imu_t *imu);
-static int8_t set_gyro_config(flow3r_bsp_imu_t *imu);
+static int8_t set_accel_gyro_config(flow3r_bsp_imu_t *imu);
 static int8_t set_step_counter_config(flow3r_bsp_imu_t *imu);
 static float lsb_to_mps(int16_t val, float g_range, uint8_t bit_width);
 static float lsb_to_dps(int16_t val, float dps, uint8_t bit_width);
@@ -89,6 +88,7 @@ esp_err_t flow3r_bsp_imu_init(flow3r_bsp_imu_t *imu) {
     bmi2_error_codes_print_result(rslt);
     if (rslt != BMI2_OK) return ESP_FAIL;
 
+    imu->odr = BMI2_GYR_ODR_25HZ;
     imu->acc_range = 2;  // 2 g default range
     rslt = set_accel_config(imu);
     bmi2_error_codes_print_result(rslt);
@@ -230,8 +230,8 @@ esp_err_t flow3r_bsp_imu_read_temperature(flow3r_bsp_imu_t *imu, float *temperat
     bmi2_error_codes_print_result(rslt);
     if (rslt != BMI2_OK) return ESP_FAIL;
     const float scaling = 0.001953125F;
-    const float offset = 23.0F; 
-    *temperature = ((float)temp_data * scaling ) + offset; 
+    const float offset = 23.0F;
+    *temperature = ((float)temp_data * scaling ) + offset;
     return ESP_OK;
 }
 
@@ -528,7 +528,7 @@ static int8_t set_accel_config(flow3r_bsp_imu_t *imu) {
 
     if (rslt == BMI2_OK) {
         /* Output Data Rate */
-        config.cfg.acc.odr = BMI2_ACC_ODR_100HZ;
+        config.cfg.acc.odr = imu->odr;
 
         /* Gravity range (+/- 2G, 4G, 8G, 16G). */
         switch (imu->acc_range) {
@@ -580,7 +580,7 @@ static int8_t set_gyro_config(flow3r_bsp_imu_t *imu) {
 
     if (rslt == BMI2_OK) {
         // Output Data Rate
-        config.cfg.gyr.odr = BMI2_GYR_ODR_100HZ;
+        config.cfg.gyr.odr = imu->odr;
 
         switch (imu->gyro_range) {
             case 125:
@@ -613,6 +613,22 @@ static int8_t set_gyro_config(flow3r_bsp_imu_t *imu) {
     }
 
     return rslt;
+}
+
+esp_err_t flow3r_bsp_imu_set_period(flow3r_bsp_imu_t *imu,
+                                    uint16_t period_ms) {
+    imu->odr = BMI2_GYR_ODR_25HZ;
+    if (period_ms <= 10) {
+        imu->odr = BMI2_GYR_ODR_100HZ;
+    } else if (period_ms <= 20) {
+        imu->odr = BMI2_GYR_ODR_50HZ;
+    }
+
+    if (set_accel_config(imu) == BMI2_OK && set_gyro_config(imu) == BMI2_OK) {
+        return ESP_OK;
+    } else {
+        return ESP_FAIL;
+    }
 }
 
 static int8_t set_step_counter_config(flow3r_bsp_imu_t *imu)

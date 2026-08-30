@@ -43,7 +43,7 @@ static SemaphoreHandle_t _mu;
 
 /**
  * @brief initialise lsm6ds3
- * @details setup the lsm6ds3 2g, 2000dps, 104Hz
+ * @details setup the lsm6ds3 2g accel and 2000dps gyro at 26Hz
  * @return esp_err_t expect ESP_OK or ESP_FAIL
  */
 esp_err_t lsm6ds3_init( void )
@@ -55,8 +55,8 @@ esp_err_t lsm6ds3_init( void )
     mux_port = tildagon_get_mux_obj( 7 );
     if (reset() >= 0)
     {
-        /* 2 g accel range, 104Hz, 2000 dps gyro range */
-        uint8_t write_buffer[3] = { CTRL1_XL, 0x41, 0x4C };
+        /* 2 g accel and 2000 dps gyro at 26Hz */
+        uint8_t write_buffer[3] = { CTRL1_XL, 0x21, 0x2C };
         mp_machine_i2c_buf_t buffer = { .len = 3, .buf = write_buffer };
         tildagon_mux_i2c_transaction( mux_port, ADDRESS, 1, &buffer, WRITE );
         /* enable step count */
@@ -151,6 +151,30 @@ int lsm6ds3_read(uint8_t reg_addr, uint8_t *reg_data, uint8_t len )
     mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = &reg_addr  },
                                     { .len = len, .buf = reg_data } };
     return tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
+}
+
+int lsm6ds3_set_period(uint16_t period_ms)
+{
+    uint8_t config[2];
+    int ret = lsm6ds3_read(CTRL1_XL, config, sizeof(config));
+    if (ret < 0)
+    {
+        return ret;
+    }
+
+    uint8_t odr = 0x20; /* 26Hz */
+    if (period_ms <= 10)
+    {
+        odr = 0x40; /* 104Hz */
+    }
+    else if (period_ms <= 20)
+    {
+        odr = 0x30; /* 52Hz */
+    }
+
+    config[0] = (config[0] & 0x0F) | odr;
+    config[1] = (config[1] & 0x0F) | odr;
+    return lsm6ds3_write(CTRL1_XL, config, sizeof(config));
 }
 
 /**

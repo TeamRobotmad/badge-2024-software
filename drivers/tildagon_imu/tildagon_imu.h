@@ -36,10 +36,12 @@ extern int tildagon_imu_read( uint8_t address, uint8_t length, uint8_t* buffer )
 extern void tildagon_imu_register_compass( int compass_job_handle, sensorfuncptr_t compass_read );
 extern void tildagon_imu_compass_read( float* x, float*y, float*z );
 
-/* Requests a new update period (in ms) for a sensor group. Recurring periods
- * below TILDAGON_I2C_MGR_MIN_PERIOD_MS are rejected. By default only accepts
- * requests that reduce the period (poll more often); pass force=true to also
- * allow increasing it, or to pass
+/* Requests a new update period (in ms) for a sensor group. For the combined
+ * accelerometer/gyroscope group, both sensors are also configured to the
+ * closest supported output data rate. Recurring periods below
+ * TILDAGON_I2C_MGR_MIN_PERIOD_MS are rejected. By default only accepts requests
+ * that reduce the period (poll more often); pass force=true to also allow
+ * increasing it, or to pass
  * TILDAGON_I2C_MGR_PERIOD_OFF to stop polling entirely. Returns true if the
  * requested period was applied. */
 extern bool tildagon_imu_set_period( imu_group_t group, uint16_t period_ms, bool force );

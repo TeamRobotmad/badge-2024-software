@@ -78,6 +78,10 @@ int st3m_imu_write(uint8_t reg_addr, uint8_t *reg_data, uint8_t len) {
     return bmi2_i2c_write(reg_addr, reg_data, len, &_imu );
 }
 
+int st3m_imu_set_period(uint16_t period_ms) {
+    return flow3r_bsp_imu_set_period(&_imu, period_ms);
+}
+
 void st3m_imu_task_acc_gyro(void) {
 
     esp_err_t ret;

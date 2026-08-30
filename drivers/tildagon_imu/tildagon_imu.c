@@ -19,6 +19,7 @@ typedef void (*stepfuncptr_t) ( uint32_t* steps );
 typedef void (*stepresetfuncptr_t) ( void );
 typedef void (*tempfuncptr_t) ( float* temperature );
 typedef int  (*i2cfuncptr_t) ( uint8_t reg_addr, uint8_t *reg_data, uint8_t len );
+typedef int  (*periodfuncptr_t) ( uint16_t period_ms );
 
 i2cfuncptr_t i2c_write[MAX_DEVICES] =
 {
@@ -30,6 +31,12 @@ i2cfuncptr_t i2c_read[MAX_DEVICES] =
 {
     /* ST3M */    st3m_imu_read,
     /* LSM6DS3 */ lsm6ds3_read,
+};
+
+periodfuncptr_t set_accel_gyro_period[MAX_DEVICES] =
+{
+    /* ST3M */    st3m_imu_set_period,
+    /* LSM6DS3 */ lsm6ds3_set_period,
 };
 
 updatefuncptr_t update_acc_gyro[MAX_DEVICES] =
@@ -254,7 +261,21 @@ bool tildagon_imu_set_period( imu_group_t group, uint16_t period_ms, bool force 
     {
         return false;
     }
-    return tildagon_i2c_mgr_set_period( job_handle[group], period_ms, force );
+    if ( !tildagon_i2c_mgr_set_period( job_handle[group], period_ms, force ) )
+    {
+        return false;
+    }
+
+    if ( group == IMU_GROUP_ACCEL_GYRO && imu < MAX_DEVICES )
+    {
+        uint16_t effective_period = tildagon_i2c_mgr_get_period( job_handle[group] );
+        if ( effective_period != TILDAGON_I2C_MGR_PERIOD_OFF &&
+             set_accel_gyro_period[imu]( effective_period ) != ESP_OK )
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 uint16_t tildagon_imu_get_period( imu_group_t group )

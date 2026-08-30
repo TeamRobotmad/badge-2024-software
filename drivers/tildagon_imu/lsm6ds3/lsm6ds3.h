@@ -13,4 +13,5 @@ extern void lsm6ds3_read_steps(uint32_t *steps);
 extern void lsm6ds3_read_temperature(float *temperature);
 extern int  lsm6ds3_write(uint8_t reg_addr, uint8_t *reg_data, uint8_t len );
 extern int  lsm6ds3_read(uint8_t reg_addr, uint8_t *reg_data, uint8_t len );
+extern int  lsm6ds3_set_period(uint16_t period_ms);
 #endif /* LSM6DS3_H */

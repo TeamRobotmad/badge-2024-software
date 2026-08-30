@@ -18,3 +18,4 @@ extern void st3m_imu_reset_steps(void);
 extern void st3m_imu_read_temperature(float *temperature);
 extern int  st3m_imu_read(uint8_t reg_addr, uint8_t *reg_data, uint8_t len);
 extern int  st3m_imu_write(uint8_t reg_addr, uint8_t *reg_data, uint8_t len);
+extern int  st3m_imu_set_period(uint16_t period_ms);
