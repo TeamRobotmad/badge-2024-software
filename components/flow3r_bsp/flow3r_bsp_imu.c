@@ -21,7 +21,8 @@ static const char *TAG = "flow3r-imu";
 #define GRAVITY_EARTH (9.80665f)
 
 static void bmi2_error_codes_print_result(int8_t rslt);
-static int8_t set_accel_gyro_config(flow3r_bsp_imu_t *imu);
+static int8_t set_accel_config(flow3r_bsp_imu_t *imu);
+static int8_t set_gyro_config(flow3r_bsp_imu_t *imu);
 static int8_t set_step_counter_config(flow3r_bsp_imu_t *imu);
 static float lsb_to_mps(int16_t val, float g_range, uint8_t bit_width);
 static float lsb_to_dps(int16_t val, float dps, uint8_t bit_width);

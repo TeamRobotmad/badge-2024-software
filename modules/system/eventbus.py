@@ -2,7 +2,6 @@ import asyncio
 
 from async_queue import Queue as AsyncQueue
 from perf_timer import PerfTimer
-from system.scheduler.events import RequestStopAppEvent
 from system.notification.events import ShowNotificationEvent
 
 import sys
@@ -110,6 +109,8 @@ class _EventBus:
                                     ):
                                         handler(event)
                     except Exception as e:
+                        from system.scheduler.events import RequestStopAppEvent
+
                         sys.print_exception(e, sys.stderr)
                         eventbus.emit(RequestStopAppEvent(app=app))
                         eventbus.emit(
@@ -138,6 +139,8 @@ class _EventBus:
                 try:
                     await asyncio.gather(*tasks)
                 except Exception as e:
+                    from system.scheduler.events import RequestStopAppEvent
+
                     sys.print_exception(e, sys.stderr)
                     eventbus.emit(RequestStopAppEvent(app=app))
                     eventbus.emit(

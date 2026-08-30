@@ -165,8 +165,9 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_job_t *job )
     i2c_mgr_set_status( job, TILDAGON_I2C_MGR_STATUS_SUCCESS );
     JOB_UNLOCK;
 
-    ESP_LOGI( TAG, "job %d poll ok, seq=%u attempt=%u, %d bytes", handle,
+    /* ESP_LOGI( TAG, "job %d poll ok, seq=%u attempt=%u, %d bytes", handle,
               (unsigned)step_job->sequence, (unsigned)step_job->attempt, offset );
+     */
 }
 
 static inline void i2c_mgr_run_job( int handle, bool step_based )

@@ -14,10 +14,6 @@ from system.scheduler.events import (
     RequestStartAppEvent,
     RequestStopAppEvent,
 )
-from system.capabilities.utils import (
-    load_manifest,
-    get_manifest_from_compact_app_format,
-)
 from system.notification.events import ShowNotificationEvent
 
 
@@ -73,6 +69,11 @@ class _Scheduler:
         await self.start_update_tasks(event.app)
 
     def start_app(self, app, foreground=False, always_on_top=False):
+        from system.capabilities.utils import (
+            load_manifest,
+            get_manifest_from_compact_app_format,
+        )
+
         self.apps.append(app)
 
         try:
