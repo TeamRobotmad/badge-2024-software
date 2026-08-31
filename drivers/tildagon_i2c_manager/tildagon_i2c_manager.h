@@ -11,6 +11,19 @@
  * future hexpansion sensors. */
 #define TILDAGON_I2C_MGR_MAX_JOBS   (10)
 
+/* Of those, a fixed sub-range is reserved for lightweight "callback" jobs -
+ * a bare function pointer plus scheduling state, no step/cache storage, so
+ * they don't pay for step-job storage they never use. This is currently
+ * only used internally by the IMU driver (accel/gyro, temperature, steps -
+ * one per continuously-polled sensor group; the compass is optional and
+ * registers as a step-based job instead, see qmc6309.c). Handles below this
+ * value are callback jobs, the rest are step-based - see
+ * tildagon_i2c_mgr_register() vs tildagon_i2c_mgr_register_steps(). Bump
+ * this (and the matching _Static_assert next to the IMU's registration
+ * calls) if a new callback-based sensor group is ever added. */
+#define TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS (3)
+#define TILDAGON_I2C_MGR_MAX_STEP_JOBS     (TILDAGON_I2C_MGR_MAX_JOBS - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS)
+
 /* Sentinel period meaning "do not poll this job". */
 #define TILDAGON_I2C_MGR_PERIOD_OFF (UINT16_MAX)
 #define TILDAGON_I2C_MGR_MAX_PERIOD_MS (UINT16_MAX - 1U)

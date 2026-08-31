@@ -10,9 +10,27 @@ typedef struct _i2c_mgr_job_obj_t {
     int handle;
 } i2c_mgr_job_obj_t;
 
-/* Coalescing flags: not GC-visible, so not a root pointer - just tracks
- * whether a dispatch is already queued for a handle. */
-static bool i2c_mgr_job_pending[TILDAGON_I2C_MGR_MAX_JOBS];
+/* Coalescing flags, packed 1 bit per job rather than a bool per job - not
+ * GC-visible, so not a root pointer - just tracks whether a dispatch is
+ * already queued for a handle. */
+static uint8_t i2c_mgr_job_pending[(TILDAGON_I2C_MGR_MAX_JOBS + 7) / 8];
+
+static inline bool i2c_mgr_pending_get( int handle )
+{
+    return (i2c_mgr_job_pending[handle / 8] & (1U << (handle % 8))) != 0;
+}
+
+static inline void i2c_mgr_pending_set( int handle, bool value )
+{
+    if ( value )
+    {
+        i2c_mgr_job_pending[handle / 8] |= (uint8_t)(1U << (handle % 8));
+    }
+    else
+    {
+        i2c_mgr_job_pending[handle / 8] &= (uint8_t)~(1U << (handle % 8));
+    }
+}
 
 /* Runs on the main MicroPython thread via mp_sched_schedule(), never on the
  * manager's background task. Clears the coalescing flag first so a poll
@@ -22,7 +40,7 @@ static mp_obj_t i2c_mgr_irq_dispatch( mp_obj_t handle_in )
     mp_int_t handle = mp_obj_get_int( handle_in );
     if ( handle >= 0 && handle < TILDAGON_I2C_MGR_MAX_JOBS )
     {
-        i2c_mgr_job_pending[handle] = false;
+        i2c_mgr_pending_set( handle, false );
         mp_obj_t handler = MP_STATE_PORT(i2c_mgr_job_irq_handler)[handle];
         if ( handler != MP_OBJ_NULL && handler != mp_const_none )
         {
@@ -44,12 +62,12 @@ static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_irq_dispatch_obj, i2c_mgr_irq_dispatch
 static void i2c_mgr_job_notify( int handle, void *arg )
 {
     (void)arg;
-    if ( !i2c_mgr_job_pending[handle] )
+    if ( !i2c_mgr_pending_get( handle ) )
     {
-        i2c_mgr_job_pending[handle] = true;
+        i2c_mgr_pending_set( handle, true );
         if ( !mp_sched_schedule( MP_OBJ_FROM_PTR(&i2c_mgr_irq_dispatch_obj), mp_obj_new_int( handle ) ) )
         {
-            i2c_mgr_job_pending[handle] = false;
+            i2c_mgr_pending_set( handle, false );
         }
     }
 }
