@@ -20,32 +20,54 @@ typedef struct
     uint8_t i2c_addr;
     uint8_t num_steps;
     uint8_t cache_len;
-    uint8_t attempt;
 } i2c_mgr_step_job_t;
 
+/* Scheduling state common to both job kinds below. */
 typedef struct
 {
     uint32_t next_due_us;
     uint16_t period_ms;
     uint8_t flags;
-    union
-    {
-        tildagon_i2c_mgr_job_fn_t callback;
-        i2c_mgr_step_job_t step_job;
-    } data;
-} i2c_mgr_job_t;
+} i2c_mgr_job_hdr_t;
 
-/* Job state, kind, priority, and three-bit status share one byte. */
+/* A callback job is just a function pointer - no cache/step storage, so it
+ * gets its own (much smaller) slot type rather than sharing a union with
+ * i2c_mgr_step_job_t, which would force every callback job to pay for
+ * step-job storage it never uses. */
+typedef struct
+{
+    i2c_mgr_job_hdr_t hdr;
+    tildagon_i2c_mgr_job_fn_t callback;
+} i2c_mgr_callback_job_t;
+
+typedef struct
+{
+    i2c_mgr_job_hdr_t hdr;
+    i2c_mgr_step_job_t step;
+} i2c_mgr_step_slot_t;
+
+/* Job state, priority, and three-bit status share one byte. Job kind
+ * (callback vs step-based) is implied by which handle range a handle falls
+ * in, not a flag bit - see i2c_mgr_is_step_handle(). */
 #define JOB_FLAG_IN_USE          (1U << 0)
-#define JOB_FLAG_STEP_BASED      (1U << 1)
 #define JOB_FLAG_VALID           (1U << 2)
 #define JOB_FLAG_RUN_ONCE_PENDING (1U << 3)
 #define JOB_STATUS_SHIFT         (4U)
 #define JOB_STATUS_MASK          (7U << JOB_STATUS_SHIFT)
 #define JOB_FLAG_HIGH_PRIORITY   (1U << 7)
 
-/* Zero-initialised: every slot starts free. */
-static i2c_mgr_job_t jobs[TILDAGON_I2C_MGR_MAX_JOBS];
+/* Zero-initialised: every slot starts free. Handles [0, MAX_CALLBACK_JOBS)
+ * index callback_jobs; handles [MAX_CALLBACK_JOBS, MAX_JOBS) index
+ * step_jobs, offset by MAX_CALLBACK_JOBS - see i2c_mgr_hdr(). */
+static i2c_mgr_callback_job_t callback_jobs[TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS];
+static i2c_mgr_step_slot_t step_jobs[TILDAGON_I2C_MGR_MAX_STEP_JOBS];
+
+/* Data-ready notification per step job (callback jobs have no notify - the
+ * caller supplies its own callback directly), kept separate so the MP
+ * binding layer can freely store/clear these without touching job state.
+ * Indexed by step index (handle - MAX_CALLBACK_JOBS), not by handle. */
+static tildagon_i2c_mgr_notify_fn_t notify_fn[TILDAGON_I2C_MGR_MAX_STEP_JOBS];
+static void *notify_arg[TILDAGON_I2C_MGR_MAX_STEP_JOBS];
 
 /* Protects scheduling state and cache publication. I2C runs unlocked; an
  * executing slot is withheld from reuse until its transaction completes. */
@@ -55,26 +77,41 @@ static int8_t running_handle = -1;
 #define JOB_LOCK   xSemaphoreTake( job_mu, portMAX_DELAY )
 #define JOB_UNLOCK xSemaphoreGive( job_mu )
 
+static inline bool i2c_mgr_is_step_handle( int handle )
+{
+    return handle >= TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS;
+}
+
+/* Returns the scheduling header for any handle, callback or step-based. */
+static inline i2c_mgr_job_hdr_t *i2c_mgr_hdr( int handle )
+{
+    if ( !i2c_mgr_is_step_handle( handle ) )
+    {
+        return &callback_jobs[handle].hdr;
+    }
+    return &step_jobs[handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS].hdr;
+}
+
 static bool i2c_mgr_period_valid( uint16_t period_ms )
 {
     return period_ms == TILDAGON_I2C_MGR_PERIOD_OFF ||
            period_ms >= TILDAGON_I2C_MGR_MIN_PERIOD_MS;
 }
 
-static inline bool i2c_mgr_job_flag( const i2c_mgr_job_t *job, uint8_t flag )
+static inline bool i2c_mgr_job_flag( const i2c_mgr_job_hdr_t *hdr, uint8_t flag )
 {
-    return (job->flags & flag) == flag;
+    return (hdr->flags & flag) == flag;
 }
 
-static inline void i2c_mgr_set_status( i2c_mgr_job_t *job, uint8_t status )
+static inline void i2c_mgr_set_status( i2c_mgr_job_hdr_t *hdr, uint8_t status )
 {
-    job->flags = (job->flags & ~JOB_STATUS_MASK) |
+    hdr->flags = (hdr->flags & ~JOB_STATUS_MASK) |
                  ((status << JOB_STATUS_SHIFT) & JOB_STATUS_MASK);
 }
 
-static inline uint8_t i2c_mgr_get_job_status( const i2c_mgr_job_t *job )
+static inline uint8_t i2c_mgr_get_job_status( const i2c_mgr_job_hdr_t *hdr )
 {
-    return (job->flags & JOB_STATUS_MASK) >> JOB_STATUS_SHIFT;
+    return (hdr->flags & JOB_STATUS_MASK) >> JOB_STATUS_SHIFT;
 }
 
 static inline bool i2c_mgr_time_due( uint32_t now_us, uint32_t due_us )
@@ -90,11 +127,10 @@ static inline void i2c_mgr_wake_task( void )
     }
 }
 
-static void i2c_mgr_finish_attempt( i2c_mgr_job_t *job, tildagon_i2c_mgr_status_t status )
+static void i2c_mgr_finish_attempt( i2c_mgr_job_hdr_t *hdr, tildagon_i2c_mgr_status_t status )
 {
     JOB_LOCK;
-    job->data.step_job.attempt++;
-    i2c_mgr_set_status( job, status );
+    i2c_mgr_set_status( hdr, status );
     JOB_UNLOCK;
 }
 
@@ -102,9 +138,9 @@ static void i2c_mgr_finish_attempt( i2c_mgr_job_t *job, tildagon_i2c_mgr_status_
  * completes and no CHECK step aborts), publishes the new cache and bumps
  * the sequence number; otherwise leaves the previously published data
  * untouched. */
-static void i2c_mgr_run_step_job( int handle, i2c_mgr_job_t *job )
+static void i2c_mgr_run_step_job( int handle, i2c_mgr_step_slot_t *slot )
 {
-    i2c_mgr_step_job_t *step_job = &job->data.step_job;
+    i2c_mgr_step_job_t *step_job = &slot->step;
     uint8_t local_cache[TILDAGON_I2C_MGR_MAX_JOB_CACHE];
     uint8_t offset = 0;
 
@@ -122,7 +158,7 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_job_t *job )
                 {
                     ESP_LOGI( TAG, "job %d step %d READ reg 0x%02X len %d failed: 0x%x",
                               handle, s, step->a, step->b, err );
-                    i2c_mgr_finish_attempt( job, TILDAGON_I2C_MGR_STATUS_I2C_ERROR );
+                    i2c_mgr_finish_attempt( &slot->hdr, TILDAGON_I2C_MGR_STATUS_I2C_ERROR );
                     return;
                 }
                 offset += step->b;
@@ -136,7 +172,7 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_job_t *job )
                 {
                     ESP_LOGI( TAG, "job %d step %d WRITE reg 0x%02X len %d failed: 0x%x",
                               handle, s, step->a, step->b, err );
-                    i2c_mgr_finish_attempt( job, TILDAGON_I2C_MGR_STATUS_I2C_ERROR );
+                    i2c_mgr_finish_attempt( &slot->hdr, TILDAGON_I2C_MGR_STATUS_I2C_ERROR );
                     return;
                 }
                 break;
@@ -148,7 +184,7 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_job_t *job )
                 {
                     ESP_LOGI( TAG, "job %d step %d CHECK not ready (byte=0x%02X mask=0x%02X val=0x%02X) - skipping poll",
                               handle, s, val, step->b, step->data[0] );
-                    i2c_mgr_finish_attempt( job, TILDAGON_I2C_MGR_STATUS_CHECK_ABORTED );
+                    i2c_mgr_finish_attempt( &slot->hdr, TILDAGON_I2C_MGR_STATUS_CHECK_ABORTED );
                     return;
                 }
                 break;
@@ -156,31 +192,37 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_job_t *job )
         }
     }
 
+    int step_idx = handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS;
     JOB_LOCK;
     memcpy( step_job->cache, local_cache, offset );
     step_job->cache_len = offset;
     step_job->sequence++;
-    step_job->attempt++;
-    job->flags |= JOB_FLAG_VALID;
-    i2c_mgr_set_status( job, TILDAGON_I2C_MGR_STATUS_SUCCESS );
+    slot->hdr.flags |= JOB_FLAG_VALID;
+    i2c_mgr_set_status( &slot->hdr, TILDAGON_I2C_MGR_STATUS_SUCCESS );
+    tildagon_i2c_mgr_notify_fn_t fn = notify_fn[step_idx];
+    void *arg = notify_arg[step_idx];
     JOB_UNLOCK;
 
+    if ( fn != NULL )
+    {
+        fn( handle, arg );
+    }
+
     /*
-    ESP_LOGI( TAG, "job %d poll ok, seq=%u attempt=%u, %d bytes", handle,
-              (unsigned)step_job->sequence, (unsigned)step_job->attempt, offset );
+    ESP_LOGI( TAG, "job %d poll ok, seq=%u, %d bytes", handle,
+              (unsigned)step_job->sequence, offset );
     */
 }
 
-static inline void i2c_mgr_run_job( int handle, bool step_based )
+static inline void i2c_mgr_run_job( int handle )
 {
-    i2c_mgr_job_t *job = &jobs[handle];
-    if ( !step_based )
+    if ( !i2c_mgr_is_step_handle( handle ) )
     {
-        job->data.callback();
+        callback_jobs[handle].callback();
     }
     else
     {
-        i2c_mgr_run_step_job( handle, job );
+        i2c_mgr_run_step_job( handle, &step_jobs[handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS] );
     }
 }
 
@@ -193,22 +235,22 @@ static TickType_t i2c_mgr_next_delay( void )
     JOB_LOCK;
     for ( int i = 0; i < TILDAGON_I2C_MGR_MAX_JOBS; i++ )
     {
-        i2c_mgr_job_t *job = &jobs[i];
-        if ( !i2c_mgr_job_flag( job, JOB_FLAG_IN_USE ) )
+        i2c_mgr_job_hdr_t *hdr = i2c_mgr_hdr( i );
+        if ( !i2c_mgr_job_flag( hdr, JOB_FLAG_IN_USE ) )
         {
             continue;
         }
-        if ( i2c_mgr_job_flag( job, JOB_FLAG_RUN_ONCE_PENDING ) ||
-             (job->period_ms != TILDAGON_I2C_MGR_PERIOD_OFF &&
-              i2c_mgr_time_due( now_us, job->next_due_us )) )
+        if ( i2c_mgr_job_flag( hdr, JOB_FLAG_RUN_ONCE_PENDING ) ||
+             (hdr->period_ms != TILDAGON_I2C_MGR_PERIOD_OFF &&
+              i2c_mgr_time_due( now_us, hdr->next_due_us )) )
         {
             shortest_us = 0;
             have_deadline = true;
             break;
         }
-        if ( job->period_ms != TILDAGON_I2C_MGR_PERIOD_OFF )
+        if ( hdr->period_ms != TILDAGON_I2C_MGR_PERIOD_OFF )
         {
-            uint32_t remaining_us = job->next_due_us - now_us;
+            uint32_t remaining_us = hdr->next_due_us - now_us;
             if ( !have_deadline || remaining_us < shortest_us )
             {
                 shortest_us = remaining_us;
@@ -244,27 +286,25 @@ static void i2c_mgr_task( void* arg )
             {
                 bool run_job = false;
                 bool run_once = false;
-                bool step_based = false;
                 uint32_t now_us = (uint32_t)esp_timer_get_time();
 
                 JOB_LOCK;
-                i2c_mgr_job_t *job = &jobs[i];
-                bool high_priority = i2c_mgr_job_flag( job, JOB_FLAG_HIGH_PRIORITY );
-                if ( i2c_mgr_job_flag( job, JOB_FLAG_IN_USE ) &&
+                i2c_mgr_job_hdr_t *hdr = i2c_mgr_hdr( i );
+                bool high_priority = i2c_mgr_job_flag( hdr, JOB_FLAG_HIGH_PRIORITY );
+                if ( i2c_mgr_job_flag( hdr, JOB_FLAG_IN_USE ) &&
                      high_priority == (priority != 0) )
                 {
-                    run_once = i2c_mgr_job_flag( job, JOB_FLAG_RUN_ONCE_PENDING );
-                    bool recurring_due = job->period_ms != TILDAGON_I2C_MGR_PERIOD_OFF &&
-                                         i2c_mgr_time_due( now_us, job->next_due_us );
+                    run_once = i2c_mgr_job_flag( hdr, JOB_FLAG_RUN_ONCE_PENDING );
+                    bool recurring_due = hdr->period_ms != TILDAGON_I2C_MGR_PERIOD_OFF &&
+                                         i2c_mgr_time_due( now_us, hdr->next_due_us );
                     if ( run_once || recurring_due )
                     {
                         if ( recurring_due )
                         {
-                            uint32_t period_us = (uint32_t)job->period_ms * 1000U;
-                            uint32_t late_us = now_us - job->next_due_us;
-                            job->next_due_us += ((late_us / period_us) + 1U) * period_us;
+                            uint32_t period_us = (uint32_t)hdr->period_ms * 1000U;
+                            uint32_t late_us = now_us - hdr->next_due_us;
+                            hdr->next_due_us += ((late_us / period_us) + 1U) * period_us;
                         }
-                        step_based = i2c_mgr_job_flag( job, JOB_FLAG_STEP_BASED );
                         running_handle = i;
                         run_job = true;
                     }
@@ -273,11 +313,11 @@ static void i2c_mgr_task( void* arg )
 
                 if ( run_job )
                 {
-                    i2c_mgr_run_job( i, step_based );
+                    i2c_mgr_run_job( i );
                     JOB_LOCK;
                     if ( run_once )
                     {
-                        jobs[i].flags &= ~JOB_FLAG_RUN_ONCE_PENDING;
+                        i2c_mgr_hdr( i )->flags &= ~JOB_FLAG_RUN_ONCE_PENDING;
                     }
                     running_handle = -1;
                     JOB_UNLOCK;
@@ -291,8 +331,9 @@ static void i2c_mgr_task( void* arg )
 
 void tildagon_i2c_mgr_init( void )
 {
-    ESP_LOGI( TAG, "init: %u bytes/job, %u bytes job table",
-              (unsigned)sizeof(i2c_mgr_job_t), (unsigned)sizeof(jobs) );
+    ESP_LOGI( TAG, "init: callback jobs %u bytes x %u slots, step jobs %u bytes x %u slots",
+              (unsigned)sizeof(i2c_mgr_callback_job_t), (unsigned)TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS,
+              (unsigned)sizeof(i2c_mgr_step_slot_t), (unsigned)TILDAGON_I2C_MGR_MAX_STEP_JOBS );
     job_mu = xSemaphoreCreateMutex();
     xTaskCreate( i2c_mgr_task, "i2c_mgr", 4096, NULL, tskIDLE_PRIORITY + 5,
                  &manager_task );
@@ -309,14 +350,14 @@ int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback, uint16_t peri
 
     int handle = -1;
     JOB_LOCK;
-    for ( int i = 0; i < TILDAGON_I2C_MGR_MAX_JOBS; i++ )
+    for ( int i = 0; i < TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS; i++ )
     {
-        if ( !i2c_mgr_job_flag( &jobs[i], JOB_FLAG_IN_USE ) && i != running_handle )
+        if ( !i2c_mgr_job_flag( &callback_jobs[i].hdr, JOB_FLAG_IN_USE ) && i != running_handle )
         {
-            jobs[i].data.callback = callback;
-            jobs[i].period_ms = period_ms;
-            jobs[i].next_due_us = (uint32_t)esp_timer_get_time();
-            jobs[i].flags = JOB_FLAG_IN_USE |
+            callback_jobs[i].callback = callback;
+            callback_jobs[i].hdr.period_ms = period_ms;
+            callback_jobs[i].hdr.next_due_us = (uint32_t)esp_timer_get_time();
+            callback_jobs[i].hdr.flags = JOB_FLAG_IN_USE |
                             (high_priority ? JOB_FLAG_HIGH_PRIORITY : 0);
             handle = i;
             break;
@@ -330,7 +371,7 @@ int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback, uint16_t peri
         i2c_mgr_wake_task();
         return handle;
     }
-    ESP_LOGW( TAG, "register: job table full" );
+    ESP_LOGW( TAG, "register: callback job table full" );
     return -1;
 }
 
@@ -390,24 +431,26 @@ int tildagon_i2c_mgr_register_steps( uint8_t port, uint8_t i2c_addr,
 
     int handle = -1;
     JOB_LOCK;
-    for ( int i = 0; i < TILDAGON_I2C_MGR_MAX_JOBS; i++ )
+    for ( int i = 0; i < TILDAGON_I2C_MGR_MAX_STEP_JOBS; i++ )
     {
-        if ( !i2c_mgr_job_flag( &jobs[i], JOB_FLAG_IN_USE ) && i != running_handle )
+        int candidate = TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS + i;
+        if ( !i2c_mgr_job_flag( &step_jobs[i].hdr, JOB_FLAG_IN_USE ) && candidate != running_handle )
         {
-            i2c_mgr_step_job_t *step_job = &jobs[i].data.step_job;
+            i2c_mgr_step_job_t *step_job = &step_jobs[i].step;
             step_job->port = port;
             step_job->i2c_addr = i2c_addr;
             step_job->num_steps = num_steps;
             memcpy( step_job->steps, steps, sizeof(tildagon_i2c_mgr_step_t) * num_steps );
             step_job->cache_len = 0;
             step_job->sequence = 0;
-            step_job->attempt = 0;
-            jobs[i].period_ms = period_ms;
-            jobs[i].next_due_us = (uint32_t)esp_timer_get_time();
-            jobs[i].flags = JOB_FLAG_IN_USE | JOB_FLAG_STEP_BASED |
+            step_jobs[i].hdr.period_ms = period_ms;
+            step_jobs[i].hdr.next_due_us = (uint32_t)esp_timer_get_time();
+            step_jobs[i].hdr.flags = JOB_FLAG_IN_USE |
                             (high_priority ? JOB_FLAG_HIGH_PRIORITY : 0);
-            i2c_mgr_set_status( &jobs[i], TILDAGON_I2C_MGR_STATUS_IDLE );
-            handle = i;
+            i2c_mgr_set_status( &step_jobs[i].hdr, TILDAGON_I2C_MGR_STATUS_IDLE );
+            notify_fn[i] = NULL;
+            notify_arg[i] = NULL;
+            handle = candidate;
             break;
         }
     }
@@ -430,7 +473,13 @@ void tildagon_i2c_mgr_unregister( int handle )
     {
         ESP_LOGI( TAG, "job %d unregistered", handle );
         JOB_LOCK;
-        jobs[handle].flags = 0;
+        i2c_mgr_hdr( handle )->flags = 0;
+        if ( i2c_mgr_is_step_handle( handle ) )
+        {
+            int idx = handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS;
+            notify_fn[idx] = NULL;
+            notify_arg[idx] = NULL;
+        }
         JOB_UNLOCK;
         i2c_mgr_wake_task();
     }
@@ -447,15 +496,16 @@ bool tildagon_i2c_mgr_set_period( int handle, uint16_t period_ms, bool force )
     bool ok = false;
     bool changed = false;
     JOB_LOCK;
-    if ( i2c_mgr_job_flag( &jobs[handle], JOB_FLAG_IN_USE ) )
+    i2c_mgr_job_hdr_t *hdr = i2c_mgr_hdr( handle );
+    if ( i2c_mgr_job_flag( hdr, JOB_FLAG_IN_USE ) )
     {
         ok = true;
-        if ( (force || period_ms < jobs[handle].period_ms) &&
-             period_ms != jobs[handle].period_ms )
+        if ( (force || period_ms < hdr->period_ms) &&
+             period_ms != hdr->period_ms )
         {
-            ESP_LOGI( TAG, "job %d period %ums -> %ums", handle, (unsigned)jobs[handle].period_ms, (unsigned)period_ms );
-            jobs[handle].period_ms = period_ms;
-            jobs[handle].next_due_us = (uint32_t)esp_timer_get_time();
+            ESP_LOGI( TAG, "job %d period %ums -> %ums", handle, (unsigned)hdr->period_ms, (unsigned)period_ms );
+            hdr->period_ms = period_ms;
+            hdr->next_due_us = (uint32_t)esp_timer_get_time();
             changed = true;
         }
     }
@@ -478,57 +528,75 @@ uint16_t tildagon_i2c_mgr_get_period( int handle )
     }
     uint16_t period_ms = TILDAGON_I2C_MGR_PERIOD_OFF;
     JOB_LOCK;
-    if ( i2c_mgr_job_flag( &jobs[handle], JOB_FLAG_IN_USE ) )
+    i2c_mgr_job_hdr_t *hdr = i2c_mgr_hdr( handle );
+    if ( i2c_mgr_job_flag( hdr, JOB_FLAG_IN_USE ) )
     {
-        period_ms = jobs[handle].period_ms;
+        period_ms = hdr->period_ms;
     }
     JOB_UNLOCK;
     return period_ms;
 }
 
-int16_t tildagon_i2c_mgr_run_once( int handle )
+bool tildagon_i2c_mgr_run_once( int handle )
 {
-    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS )
+    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS || !i2c_mgr_is_step_handle( handle ) )
+    {
+        return false;
+    }
+
+    bool armed = false;
+    JOB_LOCK;
+    i2c_mgr_job_hdr_t *hdr = i2c_mgr_hdr( handle );
+    if ( i2c_mgr_job_flag( hdr, JOB_FLAG_IN_USE ) &&
+         hdr->period_ms == TILDAGON_I2C_MGR_PERIOD_OFF &&
+         !i2c_mgr_job_flag( hdr, JOB_FLAG_RUN_ONCE_PENDING ) )
+    {
+        hdr->flags |= JOB_FLAG_RUN_ONCE_PENDING;
+        i2c_mgr_set_status( hdr, TILDAGON_I2C_MGR_STATUS_PENDING );
+        armed = true;
+    }
+    JOB_UNLOCK;
+
+    if ( armed )
+    {
+        ESP_LOGI( TAG, "job %d one-shot armed", handle );
+        i2c_mgr_wake_task();
+    }
+    return armed;
+}
+
+int tildagon_i2c_mgr_get_status( int handle )
+{
+    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS || !i2c_mgr_is_step_handle( handle ) )
     {
         return -1;
     }
 
-    int16_t target_attempt = -1;
+    int status = -1;
     JOB_LOCK;
-    i2c_mgr_job_t *job = &jobs[handle];
-    if ( i2c_mgr_job_flag( job, JOB_FLAG_IN_USE | JOB_FLAG_STEP_BASED ) &&
-         job->period_ms == TILDAGON_I2C_MGR_PERIOD_OFF &&
-         !i2c_mgr_job_flag( job, JOB_FLAG_RUN_ONCE_PENDING ) )
+    i2c_mgr_job_hdr_t *hdr = i2c_mgr_hdr( handle );
+    if ( i2c_mgr_job_flag( hdr, JOB_FLAG_IN_USE ) )
     {
-        job->flags |= JOB_FLAG_RUN_ONCE_PENDING;
-        i2c_mgr_set_status( job, TILDAGON_I2C_MGR_STATUS_PENDING );
-        target_attempt = (uint8_t)(job->data.step_job.attempt + 1U);
+        status = i2c_mgr_get_job_status( hdr );
     }
     JOB_UNLOCK;
-
-    if ( target_attempt >= 0 )
-    {
-        ESP_LOGI( TAG, "job %d one-shot armed for attempt %u", handle,
-                  (unsigned)target_attempt );
-        i2c_mgr_wake_task();
-    }
-    return target_attempt;
+    return status;
 }
 
-bool tildagon_i2c_mgr_get_status( int handle, uint8_t *attempt, uint8_t *status )
+bool tildagon_i2c_mgr_set_notify( int handle, tildagon_i2c_mgr_notify_fn_t fn, void *arg )
 {
-    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS )
+    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS || !i2c_mgr_is_step_handle( handle ) )
     {
         return false;
     }
 
     bool ok = false;
     JOB_LOCK;
-    i2c_mgr_job_t *job = &jobs[handle];
-    if ( i2c_mgr_job_flag( job, JOB_FLAG_IN_USE | JOB_FLAG_STEP_BASED ) )
+    if ( i2c_mgr_job_flag( i2c_mgr_hdr( handle ), JOB_FLAG_IN_USE ) )
     {
-        *attempt = job->data.step_job.attempt;
-        *status = i2c_mgr_get_job_status( job );
+        int idx = handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS;
+        notify_fn[idx] = fn;
+        notify_arg[idx] = arg;
         ok = true;
     }
     JOB_UNLOCK;
@@ -537,18 +605,18 @@ bool tildagon_i2c_mgr_get_status( int handle, uint8_t *attempt, uint8_t *status 
 
 int64_t tildagon_i2c_mgr_read_into( int handle, uint8_t *dest, size_t dest_len )
 {
-    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS ||
-         !i2c_mgr_job_flag( &jobs[handle], JOB_FLAG_IN_USE | JOB_FLAG_STEP_BASED ) )
+    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS || !i2c_mgr_is_step_handle( handle ) ||
+         !i2c_mgr_job_flag( i2c_mgr_hdr( handle ), JOB_FLAG_IN_USE ) )
     {
         return -1;
     }
 
-    i2c_mgr_job_t *job = &jobs[handle];
-    i2c_mgr_step_job_t *step_job = &job->data.step_job;
+    i2c_mgr_step_slot_t *slot = &step_jobs[handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS];
+    i2c_mgr_step_job_t *step_job = &slot->step;
     int64_t seq = -1;
 
     JOB_LOCK;
-    if ( i2c_mgr_job_flag( job, JOB_FLAG_VALID ) && step_job->cache_len <= dest_len )
+    if ( i2c_mgr_job_flag( &slot->hdr, JOB_FLAG_VALID ) && step_job->cache_len <= dest_len )
     {
         memcpy( dest, step_job->cache, step_job->cache_len );
         seq = (int64_t)step_job->sequence;

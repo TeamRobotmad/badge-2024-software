@@ -11,6 +11,19 @@
  * future hexpansion sensors. */
 #define TILDAGON_I2C_MGR_MAX_JOBS   (10)
 
+/* Of those, a fixed sub-range is reserved for lightweight "callback" jobs -
+ * a bare function pointer plus scheduling state, no step/cache storage, so
+ * they don't pay for step-job storage they never use. This is currently
+ * only used internally by the IMU driver (accel/gyro, temperature, steps -
+ * one per continuously-polled sensor group; the compass is optional and
+ * registers as a step-based job instead, see qmc6309.c). Handles below this
+ * value are callback jobs, the rest are step-based - see
+ * tildagon_i2c_mgr_register() vs tildagon_i2c_mgr_register_steps(). Bump
+ * this (and the matching _Static_assert next to the IMU's registration
+ * calls) if a new callback-based sensor group is ever added. */
+#define TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS (3)
+#define TILDAGON_I2C_MGR_MAX_STEP_JOBS     (TILDAGON_I2C_MGR_MAX_JOBS - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS)
+
 /* Sentinel period meaning "do not poll this job". */
 #define TILDAGON_I2C_MGR_PERIOD_OFF (UINT16_MAX)
 #define TILDAGON_I2C_MGR_MAX_PERIOD_MS (UINT16_MAX - 1U)
@@ -111,17 +124,13 @@ extern uint16_t tildagon_i2c_mgr_get_period( int handle );
 
 /* Requests exactly one execution of an idle step-based job. The job's period
  * must be TILDAGON_I2C_MGR_PERIOD_OFF. There are no automatic retries, and
- * only one execution may be pending. Returns its wrapping uint8_t attempt
- * number, or -1 if the handle is invalid, the job is recurring, or a one-shot
- * is already pending. */
-extern int16_t tildagon_i2c_mgr_run_once( int handle );
+ * only one execution may be pending. Returns false if the handle is invalid,
+ * the job is recurring, or a one-shot is already pending. */
+extern bool tildagon_i2c_mgr_run_once( int handle );
 
-/* Reads the latest step-job attempt number and status. The attempt number is
- * incremented after every execution, including CHECK-aborted and failed I2C
- * attempts, and wraps from 255 to 0. Returns false if the handle is invalid
- * or is a callback job. */
-extern bool tildagon_i2c_mgr_get_status( int handle, uint8_t *attempt,
-                                         uint8_t *status );
+/* Reads a step-based job's current status. Returns -1 if the handle is
+ * invalid or is a callback job, otherwise a TILDAGON_I2C_MGR_STATUS_* value. */
+extern int tildagon_i2c_mgr_get_status( int handle );
 
 /* Copies a step-based job's most recently published cache into dest (dest_len
  * must be >= the job's total READ byte count) and returns the sequence
@@ -132,5 +141,16 @@ extern bool tildagon_i2c_mgr_get_status( int handle, uint8_t *attempt,
  * when publishing new data, so they always correspond to each other exactly
  * (comparing sequence numbers from two separate calls would not be safe). */
 extern int64_t tildagon_i2c_mgr_read_into( int handle, uint8_t *dest, size_t dest_len );
+
+/* Called (from the manager's background task, not the registering thread)
+ * once after every poll that successfully publishes new cache data - never
+ * for a failed or CHECK-aborted poll. Do the minimum possible work here and
+ * hand off the rest; this runs on a 4KB FreeRTOS task stack, not the caller's. */
+typedef void (*tildagon_i2c_mgr_notify_fn_t)( int handle, void *arg );
+
+/* Registers (fn non-NULL) or clears (fn NULL) a step-based job's data-ready
+ * notification, replacing any previous one for this handle. Returns false if
+ * the handle is invalid or not a step-based job. */
+extern bool tildagon_i2c_mgr_set_notify( int handle, tildagon_i2c_mgr_notify_fn_t fn, void *arg );
 
 #endif /* TILDAGON_I2C_MANAGER_H */

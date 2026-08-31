@@ -282,8 +282,7 @@ not ready, so give up on this poll". When a `CHECK` aborts:
 
 - the remaining steps are skipped,
 - the previously published cache and sequence number are left untouched,
-- the attempt counter still increments, and the status becomes
-  `STATUS_CHECK_ABORTED`.
+- the status becomes `STATUS_CHECK_ABORTED`.
 
 An aborted poll is *not* an error — it simply means there was nothing new. Your
 app carries on seeing the last good sample, and the job tries again next period.
@@ -304,15 +303,17 @@ you get the manager's bus arbitration without the cost of continuous polling.
 
 ```python
 job = i2c_mgr.add_job(PORT, ADDR, steps)      # period_ms defaults to None
-attempt = job.run_once()
+job.run_once()
 ```
 
-`run_once()` returns the attempt number that the pending execution will produce,
-or `None` if the handle is invalid, the job is recurring, or a one-shot is
-already pending. Poll for completion with `get_status()`:
+`run_once()` returns `True` if the one-shot was armed, or `False` if the
+handle is invalid, the job is recurring, or a one-shot is already pending.
+Arming sets the status to `STATUS_PENDING` immediately, so polling
+`get_status()` until it stops reporting `STATUS_PENDING` tells you your
+request has been serviced:
 
 ```python
-attempt, status = job.get_status()
+status = job.get_status()
 
 if status == i2c_mgr.STATUS_SUCCESS:
     job.read_into(buf)
@@ -320,11 +321,42 @@ elif status == i2c_mgr.STATUS_I2C_ERROR:
     ...
 ```
 
-The attempt counter increments after *every* execution, including failed and
-aborted ones, and wraps from 255 back to 0. Comparing it against the value
-`run_once()` returned tells you your specific request has been serviced.
-
 There are no automatic retries: if a one-shot fails, arm another one.
+
+### Getting notified of new data
+
+Polling `get_status()` or `read_into()`'s sequence number every frame works,
+but if you would rather react only when there is something to react to, a job
+can call a handler for you instead:
+
+```python
+def on_data(job):
+    job.read_into(buf)
+    ...
+
+job.irq(on_data)
+```
+
+`irq(handler)` calls `handler(job)` once after every poll that *successfully*
+publishes new data — never for a failed or `CHECK`-aborted one, since those
+leave the previous sample untouched anyway. Pass `None` (the default) to stop
+being notified; this also happens automatically on `job.unregister()`. The
+same mechanism works for one-shot jobs too, as an alternative to polling
+`get_status()` for completion.
+
+The handler runs like any other scheduled callback (the same mechanism behind
+`Pin.irq()`), so it can run any time after the poll that triggered it, and the
+usual scheduling rules apply: keep it short, and don't assume it can't be
+interrupted by another callback.
+
+!!! note "Bursts of data are coalesced, not queued"
+    If several polls complete before your handler gets to run, you still only
+    get one call, not one per poll. The job's cache only ever holds the most
+    recent sample, so an intermediate one you never got notified about was
+    already lost the moment the next poll overwrote it — there was nothing to
+    gain by queuing up a notification for it. Always re-read the latest data
+    in your handler rather than assuming one call means exactly one new
+    sample.
 
 ### Priority
 
@@ -371,8 +403,9 @@ directly.
 | `read_into(buf)` | Copies the latest published cache into `buf` and returns its sequence number, or `None` if `buf` is too small or no poll has succeeded yet. |
 | `set_period(period_ms, force=False)` | Requests a new period. Returns `True` if the handle is valid. |
 | `get_period()` | Returns the current period in ms, or `None` if the job is not being polled. |
-| `run_once()` | Arms a single execution of an idle job. Returns the pending attempt number, or `None`. |
-| `get_status()` | Returns `(attempt, status)`, or `None` if the handle is invalid. |
+| `run_once()` | Arms a single execution of an idle job. Returns `True` if armed. |
+| `get_status()` | Returns the job's current status, or `None` if the handle is invalid. |
+| `irq(handler)` | Calls `handler(job)` after every poll that publishes new data. `handler=None` disables it. |
 | `unregister()` | Frees the job's slot. |
 
 `Job.set_period()` follows exactly the same reduce-unless-forced rule as

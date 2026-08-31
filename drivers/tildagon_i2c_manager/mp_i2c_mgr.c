@@ -10,6 +10,68 @@ typedef struct _i2c_mgr_job_obj_t {
     int handle;
 } i2c_mgr_job_obj_t;
 
+/* Coalescing flags, packed 1 bit per job rather than a bool per job - not
+ * GC-visible, so not a root pointer - just tracks whether a dispatch is
+ * already queued for a handle. */
+static uint8_t i2c_mgr_job_pending[(TILDAGON_I2C_MGR_MAX_JOBS + 7) / 8];
+
+static inline bool i2c_mgr_pending_get( int handle )
+{
+    return (i2c_mgr_job_pending[handle / 8] & (1U << (handle % 8))) != 0;
+}
+
+static inline void i2c_mgr_pending_set( int handle, bool value )
+{
+    if ( value )
+    {
+        i2c_mgr_job_pending[handle / 8] |= (uint8_t)(1U << (handle % 8));
+    }
+    else
+    {
+        i2c_mgr_job_pending[handle / 8] &= (uint8_t)~(1U << (handle % 8));
+    }
+}
+
+/* Runs on the main MicroPython thread via mp_sched_schedule(), never on the
+ * manager's background task. Clears the coalescing flag first so a poll
+ * that completes while the handler is running schedules a fresh dispatch. */
+static mp_obj_t i2c_mgr_irq_dispatch( mp_obj_t handle_in )
+{
+    mp_int_t handle = mp_obj_get_int( handle_in );
+    if ( handle >= 0 && handle < TILDAGON_I2C_MGR_MAX_JOBS )
+    {
+        i2c_mgr_pending_set( handle, false );
+        mp_obj_t handler = MP_STATE_PORT(i2c_mgr_job_irq_handler)[handle];
+        if ( handler != MP_OBJ_NULL && handler != mp_const_none )
+        {
+            mp_call_function_1( handler, MP_STATE_PORT(i2c_mgr_job_wrapper)[handle] );
+        }
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_irq_dispatch_obj, i2c_mgr_irq_dispatch );
+
+/* Registered with the C manager via tildagon_i2c_mgr_set_notify() - runs on
+ * the manager's background task, so it must not touch the heap or call into
+ * MicroPython directly. If a dispatch for this handle is already queued,
+ * skip scheduling another one: there is only storage for the most recent
+ * sample anyway, so a consumer that hasn't caught up yet loses nothing by
+ * missing an intermediate notification, and this is what stops a fast job
+ * from flooding the fixed-size scheduler queue that every other feature
+ * (e.g. Pin.irq) also shares. */
+static void i2c_mgr_job_notify( int handle, void *arg )
+{
+    (void)arg;
+    if ( !i2c_mgr_pending_get( handle ) )
+    {
+        i2c_mgr_pending_set( handle, true );
+        if ( !mp_sched_schedule( MP_OBJ_FROM_PTR(&i2c_mgr_irq_dispatch_obj), mp_obj_new_int( handle ) ) )
+        {
+            i2c_mgr_pending_set( handle, false );
+        }
+    }
+}
+
 static uint16_t i2c_mgr_parse_period( mp_obj_t period_in )
 {
     if ( period_in == MP_OBJ_NULL || period_in == mp_const_none )
@@ -74,30 +136,19 @@ static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_job_get_period_obj, i2c_mgr_job_get_pe
 static mp_obj_t i2c_mgr_job_run_once( mp_obj_t self_in )
 {
     i2c_mgr_job_obj_t *self = MP_OBJ_TO_PTR( self_in );
-    int16_t attempt = tildagon_i2c_mgr_run_once( self->handle );
-    if ( attempt < 0 )
-    {
-        return mp_const_none;
-    }
-    return mp_obj_new_int( attempt );
+    return mp_obj_new_bool( tildagon_i2c_mgr_run_once( self->handle ) );
 }
 static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_job_run_once_obj, i2c_mgr_job_run_once );
 
 static mp_obj_t i2c_mgr_job_get_status( mp_obj_t self_in )
 {
     i2c_mgr_job_obj_t *self = MP_OBJ_TO_PTR( self_in );
-    uint8_t attempt;
-    uint8_t status;
-    if ( !tildagon_i2c_mgr_get_status( self->handle, &attempt, &status ) )
+    int status = tildagon_i2c_mgr_get_status( self->handle );
+    if ( status < 0 )
     {
         return mp_const_none;
     }
-
-    mp_obj_t result[2] = {
-        mp_obj_new_int( attempt ),
-        mp_obj_new_int( status ),
-    };
-    return mp_obj_new_tuple( 2, result );
+    return mp_obj_new_int( status );
 }
 static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_job_get_status_obj, i2c_mgr_job_get_status );
 
@@ -107,11 +158,41 @@ static mp_obj_t i2c_mgr_job_unregister( mp_obj_t self_in )
     if ( self->handle >= 0 )
     {
         tildagon_i2c_mgr_unregister( self->handle );
+        MP_STATE_PORT(i2c_mgr_job_irq_handler)[self->handle] = MP_OBJ_NULL;
+        MP_STATE_PORT(i2c_mgr_job_wrapper)[self->handle] = MP_OBJ_NULL;
         self->handle = -1;
     }
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_job_unregister_obj, i2c_mgr_job_unregister );
+
+/* job.irq(handler) - handler(job) is called once after every poll that
+ * publishes new data; pass None (the default) to stop being notified.
+ * Multiple completions that occur before the handler gets to run are
+ * coalesced into a single call, so the handler should always re-read via
+ * read_into() rather than assume exactly one sample per call. */
+static mp_obj_t i2c_mgr_job_irq( size_t n_args, const mp_obj_t *args )
+{
+    i2c_mgr_job_obj_t *self = MP_OBJ_TO_PTR( args[0] );
+    if ( self->handle < 0 )
+    {
+        mp_raise_ValueError( MP_ERROR_TEXT("job is unregistered") );
+    }
+    mp_obj_t handler = ( n_args > 1 ) ? args[1] : mp_const_none;
+    int index = self->handle;
+    if ( handler == mp_const_none )
+    {
+        MP_STATE_PORT(i2c_mgr_job_irq_handler)[index] = MP_OBJ_NULL;
+        tildagon_i2c_mgr_set_notify( index, NULL, NULL );
+    }
+    else
+    {
+        MP_STATE_PORT(i2c_mgr_job_irq_handler)[index] = handler;
+        tildagon_i2c_mgr_set_notify( index, i2c_mgr_job_notify, NULL );
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN( i2c_mgr_job_irq_obj, 1, 2, i2c_mgr_job_irq );
 
 static const mp_rom_map_elem_t i2c_mgr_job_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_read_into), MP_ROM_PTR(&i2c_mgr_job_read_into_obj) },
@@ -119,6 +200,7 @@ static const mp_rom_map_elem_t i2c_mgr_job_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_get_period), MP_ROM_PTR(&i2c_mgr_job_get_period_obj) },
     { MP_ROM_QSTR(MP_QSTR_run_once), MP_ROM_PTR(&i2c_mgr_job_run_once_obj) },
     { MP_ROM_QSTR(MP_QSTR_get_status), MP_ROM_PTR(&i2c_mgr_job_get_status_obj) },
+    { MP_ROM_QSTR(MP_QSTR_irq), MP_ROM_PTR(&i2c_mgr_job_irq_obj) },
     { MP_ROM_QSTR(MP_QSTR_unregister), MP_ROM_PTR(&i2c_mgr_job_unregister_obj) },
 };
 static MP_DEFINE_CONST_DICT( i2c_mgr_job_locals_dict, i2c_mgr_job_locals_dict_table );
@@ -239,6 +321,7 @@ static mp_obj_t i2c_mgr_add_job( size_t n_args, const mp_obj_t *pos_args, mp_map
 
     i2c_mgr_job_obj_t *job = mp_obj_malloc( i2c_mgr_job_obj_t, &i2c_mgr_job_type );
     job->handle = handle;
+    MP_STATE_PORT(i2c_mgr_job_wrapper)[handle] = MP_OBJ_FROM_PTR( job );
     return MP_OBJ_FROM_PTR( job );
 }
 static MP_DEFINE_CONST_FUN_OBJ_KW( i2c_mgr_add_job_obj, 3, i2c_mgr_add_job );
@@ -264,3 +347,6 @@ const mp_obj_module_t mp_module_i2c_mgr_user_cmodule = {
 };
 
 MP_REGISTER_MODULE(MP_QSTR_i2c_mgr, mp_module_i2c_mgr_user_cmodule);
+
+MP_REGISTER_ROOT_POINTER(mp_obj_t i2c_mgr_job_wrapper[TILDAGON_I2C_MGR_MAX_JOBS]);
+MP_REGISTER_ROOT_POINTER(mp_obj_t i2c_mgr_job_irq_handler[TILDAGON_I2C_MGR_MAX_JOBS]);
