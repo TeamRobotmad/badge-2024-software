@@ -1,4 +1,11 @@
 {
+  "exclude": [
+    "micropython",
+    "**/build",
+    "**/build-*",
+    "**/__pycache__",
+    "**/.pytest_cache"
+  ],
   "stubPath": "sim/apps/typings",
   "extraPaths": [
     "modules"
