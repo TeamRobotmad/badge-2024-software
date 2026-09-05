@@ -9,7 +9,10 @@ import os
 import math
 import sys
 
-import wasmtime
+try:
+    import wasmtime
+except ModuleNotFoundError:
+    wasmtime = None
 
 
 class Wasm:
@@ -19,6 +22,12 @@ class Wasm:
     """
 
     def __init__(self):
+        if wasmtime is None:
+            raise ModuleNotFoundError(
+                "wasmtime is not installed. Install the simulator dependencies with "
+                "'pip install wasmtime==39.0.0' or 'pipenv install'."
+            )
+
         # Create engine and store
         engine = wasmtime.Engine()
         store = wasmtime.Store(engine)
@@ -174,9 +183,19 @@ class Wasm:
         return r
 
 
-_wasm = Wasm()
+_wasm = Wasm() if wasmtime is not None else None
 
 _img_cache = {}
+
+
+def _require_wasm():
+    if _wasm is None:
+        raise RuntimeError(
+            "The simulator UI backend requires the optional 'wasmtime' package. "
+            "Install it with 'pip install wasmtime==39.0.0' or run 'pipenv install' "
+            "in the sim directory."
+        )
+    return _wasm
 
 
 class Context:
