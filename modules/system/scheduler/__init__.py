@@ -202,13 +202,14 @@ class _Scheduler:
         async def mark_update_finished():
             # Unblock renderer
             self.render_needed.set()
-            await asyncio.sleep(0.05)
+            await asyncio.sleep_ms(50)
 
             # If we're no longer foregounded, wait until it is before returning
             did_lose_focus = False
             while not self.app_is_foregrounded(app):
                 did_lose_focus = True
-                await asyncio.sleep(0.250)
+                print(f"App {app} lost foreground focus, waiting to regain it...")
+                await asyncio.sleep_ms(250)
 
             # Return control to the update task
             return did_lose_focus
