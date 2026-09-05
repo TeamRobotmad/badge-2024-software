@@ -161,4 +161,4 @@ class TwentyTwentyFour(FrontBoard):
                                 )
                             else:
                                 TwentyTwentyFour.button_states[key][1] += 1
-            await asyncio.sleep(0.1)
+            await asyncio.sleep_ms(100)

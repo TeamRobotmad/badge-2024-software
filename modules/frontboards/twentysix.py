@@ -370,4 +370,4 @@ class TwentyTwentySix(FrontBoard):
                                 )
                                 TwentyTwentySix.joystick_states[key][1] = now
 
-            await asyncio.sleep(0.1)
+            await asyncio.sleep_ms(100)
