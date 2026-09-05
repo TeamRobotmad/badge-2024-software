@@ -155,8 +155,8 @@ int tildagon_mux_i2c_transaction(tildagon_mux_i2c_obj_t *self, uint16_t addr, si
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 
     // Diagnostics GPIO output to indicate I2C activity
-    gpio_set_direction(GPIO_NUM_11, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_NUM_11, 1);
+    //gpio_set_direction(GPIO_NUM_11, GPIO_MODE_OUTPUT);
+    //gpio_set_level(GPIO_NUM_11, 1);
 
     if (flags & MP_MACHINE_I2C_FLAG_WRITE1) {
         i2c_master_start(cmd);
@@ -190,7 +190,7 @@ int tildagon_mux_i2c_transaction(tildagon_mux_i2c_obj_t *self, uint16_t addr, si
     i2c_cmd_link_delete(cmd);
 
     // Diagnostics GPIO output to indicate I2C activity
-    gpio_set_level(GPIO_NUM_11, 0);
+    //gpio_set_level(GPIO_NUM_11, 0);
 
     if (err == ESP_FAIL) {
         return -MP_ENODEV;
