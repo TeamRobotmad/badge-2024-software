@@ -45,6 +45,7 @@ void aw9523b_irq_configure(aw9523b_device_t *dev, aw9523b_pin_t pin, uint8_t mod
 bool aw9523b_pin_get_input(aw9523b_device_t *dev, aw9523b_pin_t pin);
 bool aw9523b_pin_get_output(aw9523b_device_t *dev, aw9523b_pin_t pin);
 void aw9523b_pin_set_output(aw9523b_device_t *dev, aw9523b_pin_t pin, aw9523b_pin_state_t state);
+void aw9523b_pin_toggle(aw9523b_device_t *dev, aw9523b_pin_t pin);
 bool aw9523b_pin_get_direction(aw9523b_device_t *dev, aw9523b_pin_t pin);
 void aw9523b_pin_set_direction(aw9523b_device_t *dev, aw9523b_pin_t pin, aw9523b_pin_state_t state);
 aw9523b_pin_mode_t aw9523b_pin_get_mode(aw9523b_device_t *dev, aw9523b_pin_t pin);
