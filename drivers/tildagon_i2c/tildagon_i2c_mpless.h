@@ -17,6 +17,7 @@
 #define TILDAGON_HX4_I2C_PORT (5)
 #define TILDAGON_HX5_I2C_PORT (6)
 #define TILDAGON_SYS_I2C_PORT (7)
+#define TILDAGON_MAX_I2C_PORT (7)
 
 void tildagon_i2c_init(void);
 
