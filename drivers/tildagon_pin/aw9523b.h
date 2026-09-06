@@ -26,6 +26,9 @@ typedef struct aw9523b_device
   uint16_t i2c_addr;
   uint8_t last_input_values[2];
   uint8_t irq_enables[2];
+  uint8_t output_values[2];    // shadow of Output Port regs 0x02/0x03, avoids read-modify-write
+  uint8_t direction_values[2]; // shadow of Configuration regs 0x04/0x05, avoids read-modify-write
+  uint8_t mode_values[2];      // shadow of GPIO/LED Mode regs 0x12/0x13, avoids read-modify-write
   aw9523b_irq_handler_t irq_handlers[2][8];
 } aw9523b_device_t;
 
