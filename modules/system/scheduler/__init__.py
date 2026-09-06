@@ -208,7 +208,6 @@ class _Scheduler:
             did_lose_focus = False
             while not self.app_is_foregrounded(app):
                 did_lose_focus = True
-                print(f"App {app} lost foreground focus, waiting to regain it...")
                 await asyncio.sleep_ms(250)
 
             # Return control to the update task
