@@ -52,7 +52,7 @@ esp_err_t lsm6ds3_init( tildagon_imu_state_t *state )
     assert(_mu != NULL);
 
     esp_err_t err = ESP_FAIL;
-    mux_port = tildagon_get_mux_obj( 7 );
+    mux_port = tildagon_get_mux_obj( TILDAGON_SYS_I2C_PORT );
     if (reset() >= 0)
     {
         /* 2 g accel and 2000 dps gyro at 26Hz */
