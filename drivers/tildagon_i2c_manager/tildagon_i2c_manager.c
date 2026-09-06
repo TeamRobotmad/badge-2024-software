@@ -224,9 +224,7 @@ static inline void i2c_mgr_run_job( int handle )
 
         callback_jobs[handle].callback();
 
-        JOB_LOCK;
-        i2c_mgr_set_status( &callback_jobs[handle].hdr, TILDAGON_I2C_MGR_STATUS_SUCCESS );
-        JOB_UNLOCK;
+        i2c_mgr_finish_attempt( &callback_jobs[handle].hdr, TILDAGON_I2C_MGR_STATUS_SUCCESS );
     }
     else
     {
@@ -339,9 +337,11 @@ static void i2c_mgr_task( void* arg )
 
 void tildagon_i2c_mgr_init( void )
 {
+    /*
     ESP_LOGI( TAG, "init: callback jobs %u bytes x %u slots, step jobs %u bytes x %u slots",
               (unsigned)sizeof(i2c_mgr_callback_job_t), (unsigned)TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS,
               (unsigned)sizeof(i2c_mgr_step_slot_t), (unsigned)TILDAGON_I2C_MGR_MAX_STEP_JOBS );
+    */
     job_mu = xSemaphoreCreateMutex();
     xTaskCreate( i2c_mgr_task, "i2c_mgr", 4096, NULL, tskIDLE_PRIORITY + 5,
                  &manager_task );
@@ -374,7 +374,7 @@ int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback, uint16_t peri
     JOB_UNLOCK;
     if ( handle >= 0 )
     {
-        ESP_LOGI( TAG, "job %d registered: callback, period=%ums priority=%s", handle,
+        ESP_LOGI( TAG, "job %d reg: cb, period=%ums pri=%s", handle,
                   (unsigned)period_ms, high_priority ? "high" : "low" );
         i2c_mgr_wake_task();
         return handle;
@@ -387,7 +387,7 @@ int tildagon_i2c_mgr_register_steps( uint8_t port, uint8_t i2c_addr,
                                       const tildagon_i2c_mgr_step_t *steps, uint8_t num_steps,
                                       uint16_t period_ms, bool high_priority )
 {
-    if ( port > 7 || i2c_addr > 0x7f )
+    if ( port > TILDAGON_MAX_I2C_PORT || i2c_addr > 0x7f )
     {
         ESP_LOGW( TAG, "register_steps: invalid port %u or address 0x%02X",
                   port, i2c_addr );
@@ -465,7 +465,7 @@ int tildagon_i2c_mgr_register_steps( uint8_t port, uint8_t i2c_addr,
     JOB_UNLOCK;
     if ( handle >= 0 )
     {
-        ESP_LOGI( TAG, "job %d registered: port=%d addr=0x%02X steps=%d cache=%d period=%ums priority=%s",
+        ESP_LOGI( TAG, "job %d reg: port=%d addr=0x%02X steps=%d cache=%d period=%ums pri=%s",
                   handle, port, i2c_addr, num_steps, cache_len, (unsigned)period_ms,
                   high_priority ? "high" : "low" );
         i2c_mgr_wake_task();
@@ -567,7 +567,9 @@ bool tildagon_i2c_mgr_run_once( int handle )
 
     if ( armed )
     {
+        /*
         ESP_LOGI( TAG, "job %d one-shot armed", handle );
+        */
         i2c_mgr_wake_task();
     }
     return armed;
