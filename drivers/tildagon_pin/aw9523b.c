@@ -38,6 +38,9 @@ static esp_err_t aw9523b_writeregs(aw9523b_device_t *dev, uint8_t reg, const uin
 }
 
 
+/* Structure for a single register write via the I2C manager.
+   This is used to store the details of a pending write operation
+   so that the I2C manager can execute it asynchronously. */
 typedef struct {
     uint8_t reg;
     uint8_t value;
@@ -78,47 +81,40 @@ void aw9523b_writereg_handler( void )
                                 (mp_machine_i2c_buf_t *)&buffer, WRITE );
 }
 
+/* The default output values of the AW9523B depend on its I2C address */
 const uint8_t aw9523b_default_output_values[4][2] = {{ 0x00U, 0x00U }, { 0x0FU, 0x0FU }, { 0xF0U, 0xF0U }, { 0xFFU, 0xFFU }};
 
 void aw9523b_init(aw9523b_device_t *dev)
 {
-    aw9523b_writeregs(dev, 0x7F, (const uint8_t*)"\x00", 2);
-    aw9523b_writeregs(dev, 0x06, (const uint8_t*)"\xff\xff", 2);
-    aw9523b_writeregs(dev, 0x04, (const uint8_t*)"\xff\xff", 2);
-    aw9523b_writeregs(dev, 0x11, (const uint8_t*)"\x10", 1);
-    aw9523b_writeregs(dev, 0x20, (const uint8_t*)"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16);
+    aw9523b_writeregs(dev, 0x7F, (const uint8_t*)"\x00", 2);        // Soft Reset
+    aw9523b_writeregs(dev, 0x06, (const uint8_t*)"\xff\xff", 2);    // Disable interrupts on all pins
+    aw9523b_writeregs(dev, 0x04, (const uint8_t*)"\xff\xff", 2);    // Set all pins as inputs
+    aw9523b_writeregs(dev, 0x11, (const uint8_t*)"\x10", 1);        // Set P0 port to push-pull output
+    // 0x00 is the default setting for the PWM registers anyway, so no need to explicitly write it
+    //aw9523b_writeregs(dev, 0x20, (const uint8_t*)"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16);
+
     dev->irq_enables[0] = 0xFFU;
     dev->irq_enables[1] = 0xFFU;
-    aw9523b_pin_get_input(dev, 0);
-    aw9523b_pin_get_input(dev, 8);
+    aw9523b_pin_get_input(dev, 0);  // initialise last_input_values for port 0
+    aw9523b_pin_get_input(dev, 8);  // initialise last_input_values for port 1
 
     // direction was just written above; seed the shadow directly rather than reading it back
     dev->direction_values[0] = 0xFFU;
     dev->direction_values[1] = 0xFFU;
 
-    // output/mode were left at their power-on-reset value, so seed the shadow from a one-off read
-    aw9523b_readregs(dev, 0x02, &dev->output_values[0], 1);
-    aw9523b_readregs(dev, 0x03, &dev->output_values[1], 1);
-    // Check the readback values against default/reset values - if they match then we can change code to just use teh defaults
-    // the default values depend on the i2c_addr of the device
-    int device = (dev->i2c_addr & 0x03);
-    if (dev->output_values[0] == aw9523b_default_output_values[device][0] &&
-        dev->output_values[1] == aw9523b_default_output_values[device][1]) {
-        // The output values match the default/reset values
-        ESP_LOGI(TAG, "Dev %d: Outputs match defaults", device);
-    }
-    else
-    {
-        ESP_LOGW(TAG, "Dev %d: Outputs 0x%02X 0x%02X do not match defaults", device, dev->output_values[0], dev->output_values[1]);
-    }
+    // outputs were left at their power-on-reset value, so seed the shadow directly rather than reading it back
+    dev->output_values[0] = aw9523b_default_output_values[(dev->i2c_addr & 0x03)][0];
+    dev->output_values[1] = aw9523b_default_output_values[(dev->i2c_addr & 0x03)][1];
 
     // mode was left at its power-on-reset value, so seed the shadow directly
     dev->mode_values[0] = 0xFFU;
     dev->mode_values[1] = 0xFFU;
 
     // register a callback job with the i2c manager for use in writing single registers
-    m_aw9523b_i2c_manager_job_handle = (int8_t)tildagon_i2c_mgr_register( aw9523b_writereg_handler, TILDAGON_I2C_MGR_PERIOD_OFF, true );
-    assert(m_aw9523b_i2c_manager_job_handle >= 0);
+    if (m_aw9523b_i2c_manager_job_handle == -1) {
+        m_aw9523b_i2c_manager_job_handle = (int8_t)tildagon_i2c_mgr_register( aw9523b_writereg_handler, TILDAGON_I2C_MGR_PERIOD_OFF, true );
+        assert(m_aw9523b_i2c_manager_job_handle >= 0);
+    }
 }
 
 
