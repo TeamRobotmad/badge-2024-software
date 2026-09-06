@@ -218,7 +218,15 @@ static inline void i2c_mgr_run_job( int handle )
 {
     if ( !i2c_mgr_is_step_handle( handle ) )
     {
+        JOB_LOCK;
+        i2c_mgr_set_status( &callback_jobs[handle].hdr, TILDAGON_I2C_MGR_STATUS_PENDING );
+        JOB_UNLOCK;
+
         callback_jobs[handle].callback();
+
+        JOB_LOCK;
+        i2c_mgr_set_status( &callback_jobs[handle].hdr, TILDAGON_I2C_MGR_STATUS_SUCCESS );
+        JOB_UNLOCK;
     }
     else
     {
@@ -539,7 +547,7 @@ uint16_t tildagon_i2c_mgr_get_period( int handle )
 
 bool tildagon_i2c_mgr_run_once( int handle )
 {
-    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS || !i2c_mgr_is_step_handle( handle ) )
+    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS )
     {
         return false;
     }
@@ -567,7 +575,7 @@ bool tildagon_i2c_mgr_run_once( int handle )
 
 int tildagon_i2c_mgr_get_status( int handle )
 {
-    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS || !i2c_mgr_is_step_handle( handle ) )
+    if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS )
     {
         return -1;
     }
