@@ -156,6 +156,20 @@ void aw9523b_pin_set_output(aw9523b_device_t *dev, aw9523b_pin_t pin, aw9523b_pi
     aw9523b_writeregs_via_i2c_manager(dev, reg, &dev->output_values[port], 1);
 }
 
+void aw9523b_pin_toggle(aw9523b_device_t *dev, aw9523b_pin_t pin) {
+    aw9523b_check_valid_pin(pin);
+    uint8_t port = aw9523b_portnum(pin);
+    uint8_t pin_mask = 1 << aw9523b_portpin(pin);
+    uint8_t reg = 0x02 + port;
+
+    if (dev->output_values[port] & pin_mask) {
+        dev->output_values[port] &= ~pin_mask;
+    } else {
+        dev->output_values[port] |= pin_mask;
+    }
+    aw9523b_writeregs_via_i2c_manager(dev, reg, &dev->output_values[port], 1);
+}
+
 bool aw9523b_pin_get_direction(aw9523b_device_t *dev, aw9523b_pin_t pin) {
     aw9523b_check_valid_pin(pin);
     uint8_t port = aw9523b_portnum(pin);
