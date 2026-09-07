@@ -130,14 +130,13 @@ void lsm6ds3_read_temperature(float *temperature)
  */
 int lsm6ds3_write(uint8_t reg_addr, uint8_t *reg_data, uint8_t len )
 {
-    uint8_t data[len+1];
-    data[0] = reg_addr;
-    for (uint8_t i = 0; i<len; i++)
+    if ( len == 0U )
     {
-        data[i+1]=reg_data[i];
+        return 0;
     }
-    mp_machine_i2c_buf_t buffer = { .len = len+1, .buf = data  };
-    return tildagon_mux_i2c_transaction( mux_port, ADDRESS, 1, &buffer, WRITE );
+
+    return tildagon_i2c_reg_write( TILDAGON_SYS_I2C_PORT, ADDRESS,
+                                   reg_addr, reg_data, len );
 }
 
 /**
@@ -148,9 +147,8 @@ int lsm6ds3_write(uint8_t reg_addr, uint8_t *reg_data, uint8_t len )
  */
 int lsm6ds3_read(uint8_t reg_addr, uint8_t *reg_data, uint8_t len )
 {
-    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = &reg_addr  },
-                                    { .len = len, .buf = reg_data } };
-    return tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
+    return tildagon_i2c_reg_read( TILDAGON_SYS_I2C_PORT, ADDRESS,
+                                  reg_addr, reg_data, len );
 }
 
 int lsm6ds3_set_period(uint16_t period_ms)

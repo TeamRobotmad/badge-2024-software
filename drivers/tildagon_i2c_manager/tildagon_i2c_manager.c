@@ -374,8 +374,7 @@ int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback, uint16_t peri
     JOB_UNLOCK;
     if ( handle >= 0 )
     {
-        ESP_LOGI( TAG, "job %d reg: cb, period=%ums pri=%s", handle,
-                  (unsigned)period_ms, high_priority ? "high" : "low" );
+        ESP_LOGI( TAG, "job %d reg: cb, pri=%s", handle, high_priority ? "high" : "low" );
         i2c_mgr_wake_task();
         return handle;
     }
@@ -465,8 +464,8 @@ int tildagon_i2c_mgr_register_steps( uint8_t port, uint8_t i2c_addr,
     JOB_UNLOCK;
     if ( handle >= 0 )
     {
-        ESP_LOGI( TAG, "job %d reg: port=%d addr=0x%02X steps=%d cache=%d period=%ums pri=%s",
-                  handle, port, i2c_addr, num_steps, cache_len, (unsigned)period_ms,
+        ESP_LOGI( TAG, "job %d reg: port=%d addr=0x%02X steps=%d cache=%d pri=%s",
+                  handle, port, i2c_addr, num_steps, cache_len,
                   high_priority ? "high" : "low" );
         i2c_mgr_wake_task();
         return handle;

@@ -2,14 +2,14 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "py/mperrno.h"
-#include "st3m_imu.h"
+#include "bmi270/bmi270.h"
 #include "lsm6ds3.h"
 
 #include "tildagon_imu.h"
 
 typedef enum
 {
-    ST3M,
+    BMI270,
     LSM6DS3,
     /* add new imu type here */
     MAX_DEVICES,
@@ -23,78 +23,78 @@ typedef int  (*periodfuncptr_t) ( uint16_t period_ms );
 
 i2cfuncptr_t i2c_write[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_write,
-    /* LSM6DS3 */ lsm6ds3_write,
+    /* BMI270 */   bmi270_write,
+    /* LSM6DS3 */  lsm6ds3_write,
 };
 
 i2cfuncptr_t i2c_read[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_read,
-    /* LSM6DS3 */ lsm6ds3_read,
+    /* BMI270 */   bmi270_read,
+    /* LSM6DS3 */  lsm6ds3_read,
 };
 
 periodfuncptr_t set_accel_gyro_period[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_set_period,
-    /* LSM6DS3 */ lsm6ds3_set_period,
+    /* BMI270 */   bmi270_set_period,
+    /* LSM6DS3 */  lsm6ds3_set_period,
 };
 
 updatefuncptr_t update_acc_gyro[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_task_acc_gyro,
-    /* LSM6DS3 */ lsm6ds3_task_acc_gyro,
+    /* BMI270 */   bmi270_task_acc_gyro,
+    /* LSM6DS3 */  lsm6ds3_task_acc_gyro,
 };
 
 updatefuncptr_t update_temperature[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_task_temperature,
-    /* LSM6DS3 */ lsm6ds3_task_temperature,
+    /* BMI270 */   bmi270_task_temperature,
+    /* LSM6DS3 */  lsm6ds3_task_temperature,
 };
 
 updatefuncptr_t update_steps[MAX_DEVICES] =
 {
-    /* ST3M */    st3m_imu_task_steps,
-    /* LSM6DS3 */ lsm6ds3_task_steps,
+    /* BMI270 */   bmi270_task_steps,
+    /* LSM6DS3 */  lsm6ds3_task_steps,
 };
 
 sensorfuncptr_t accel_read[MAX_DEVICES] =
 {
-    /* ST3M */     st3m_imu_read_acc_mps,
+    /* BMI270 */   bmi270_read_acc_mps,
     /* LSM6DS3 */  lsm6ds3_read_acc_mps,
 };
 
 sensorfuncptr_t gyro_read[MAX_DEVICES] =
 {
-    /* ST3M */     st3m_imu_read_gyro_dps,
+    /* BMI270 */   bmi270_read_gyro_dps,
     /* LSM6DS3 */  lsm6ds3_read_gyro_dps,
 };
 
 stepfuncptr_t step_read[MAX_DEVICES] =
 {
-    /* ST3M */     st3m_imu_read_steps,
+    /* BMI270 */   bmi270_read_steps,
     /* LSM6DS3 */  lsm6ds3_read_steps,
 };
 
 stepresetfuncptr_t step_reset[MAX_DEVICES] =
 {
-    /* ST3M */     st3m_imu_reset_steps,
+    /* BMI270 */   bmi270_reset_steps,
     /* LSM6DS3 */  NULL,  /* resets its count on each read, no explicit reset */
 };
 
 tempfuncptr_t temp_read[MAX_DEVICES] =
 {
-    /* ST3M */     st3m_imu_read_temperature,
+    /* BMI270 */   bmi270_read_temperature,
     /* LSM6DS3 */  lsm6ds3_read_temperature,
 };
 
 static sensorfuncptr_t compass_readptr = NULL;
 
-static char st3m_id[]  = "bmi270";
-static char lsm6ds3_id[]  = "lsm6ds3";
+static char bmi270_id[] = "bmi270";
+static char lsm6ds3_id[] = "lsm6ds3";
 static char* id_list[MAX_DEVICES] =
 {
-    /* ST3M */     st3m_id,
-    /* LSM6DS3 */  lsm6ds3_id,
+    /* BMI270 */  bmi270_id,
+    /* LSM6DS3 */ lsm6ds3_id,
 };
 
 which_imu_t imu = MAX_DEVICES;
@@ -124,9 +124,9 @@ void tildagon_imu_init( void )
     _Static_assert( IMU_NUM_GROUPS - 1 <= TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS,
                     "not enough i2c manager callback-job slots for all callback-based IMU groups" );
 
-    if ( st3m_imu_init() == ESP_OK )
+    if ( bmi270_init() == ESP_OK )
     {
-        imu = ST3M;
+        imu = BMI270;
     }
     else if ( lsm6ds3_init() == ESP_OK )
     {
