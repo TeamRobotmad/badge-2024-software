@@ -35,8 +35,9 @@
 #define TILDAGON_BMI270_H
 
 #include <stdint.h>
+#include "tildagon_imu.h"
 
-extern int bmi270_init( void );
+extern int  bmi270_init( tildagon_imu_state_t *state );
 extern void bmi270_task_acc_gyro( void );
 extern void bmi270_task_temperature( void );
 extern void bmi270_task_steps( void );

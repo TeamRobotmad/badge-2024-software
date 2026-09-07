@@ -15,6 +15,20 @@
 typedef void (*updatefuncptr_t) ( void );
 typedef void (*sensorfuncptr_t) ( float* x, float*y, float*z );
 
+typedef struct
+{
+    float acc_x;
+    float acc_y;
+    float acc_z;
+    float gyro_x;
+    float gyro_y;
+    float gyro_z;
+    float temperature;
+    uint32_t steps;
+    uint32_t last_step_count;
+    uint8_t flags;
+} tildagon_imu_state_t;
+
 typedef enum
 {
     IMU_GROUP_ACCEL_GYRO,

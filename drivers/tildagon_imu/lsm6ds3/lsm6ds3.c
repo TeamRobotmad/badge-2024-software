@@ -27,17 +27,11 @@ static esp_err_t reset( void );
 #define READ ( MP_MACHINE_I2C_FLAG_WRITE1 | MP_MACHINE_I2C_FLAG_READ | MP_MACHINE_I2C_FLAG_STOP )
 #define WRITE MP_MACHINE_I2C_FLAG_STOP
 
-static float acc_x = 0.0F;
-static float acc_y = 0.0F;
-static float acc_z = 0.0F;
-static float gyro_x = 0.0F;
-static float gyro_y = 0.0F;
-static float gyro_z = 0.0F;
-static float _temperature = 0.0F;
-static uint32_t _steps = 0U;
+static tildagon_imu_state_t *imu_state = NULL;
 tildagon_mux_i2c_obj_t* mux_port;
 
 static SemaphoreHandle_t _mu;
+
 #define LOCK xSemaphoreTake(_mu, portMAX_DELAY)
 #define UNLOCK xSemaphoreGive(_mu)
 
@@ -46,8 +40,14 @@ static SemaphoreHandle_t _mu;
  * @details setup the lsm6ds3 2g accel and 2000dps gyro at 26Hz
  * @return esp_err_t expect ESP_OK or ESP_FAIL
  */
-esp_err_t lsm6ds3_init( void )
+esp_err_t lsm6ds3_init( tildagon_imu_state_t *state )
 {
+    imu_state = state;
+    if ( imu_state == NULL )
+    {
+        return ESP_FAIL;
+    }
+
     _mu = xSemaphoreCreateMutex();
     assert(_mu != NULL);
 
@@ -77,10 +77,18 @@ esp_err_t lsm6ds3_init( void )
  */
 void lsm6ds3_read_acc_mps(float *x, float *y, float *z)
 {
+    if ( imu_state == NULL )
+    {
+        *x = 0.0F;
+        *y = 0.0F;
+        *z = 0.0F;
+        return;
+    }
+
     LOCK;
-    *x = acc_x;
-    *y = acc_y;
-    *z = acc_z;
+    *x = imu_state->acc_x;
+    *y = imu_state->acc_y;
+    *z = imu_state->acc_z;
     UNLOCK;
 }
 
@@ -92,10 +100,18 @@ void lsm6ds3_read_acc_mps(float *x, float *y, float *z)
  */
 void lsm6ds3_read_gyro_dps(float *x, float *y, float *z)
 {
+    if ( imu_state == NULL )
+    {
+        *x = 0.0F;
+        *y = 0.0F;
+        *z = 0.0F;
+        return;
+    }
+
     LOCK;
-    *x = gyro_x;
-    *y = gyro_y;
-    *z = gyro_z;
+    *x = imu_state->gyro_x;
+    *y = imu_state->gyro_y;
+    *z = imu_state->gyro_z;
     UNLOCK;
 }
 
@@ -105,9 +121,15 @@ void lsm6ds3_read_gyro_dps(float *x, float *y, float *z)
  */
 void lsm6ds3_read_steps(uint32_t *steps)
 {
+    if ( imu_state == NULL )
+    {
+        *steps = 0U;
+        return;
+    }
+
     LOCK;
-    *steps = _steps;
-    _steps = 0;
+    *steps = imu_state->steps;
+    imu_state->steps = 0U;
     UNLOCK;
 }
 
@@ -117,8 +139,14 @@ void lsm6ds3_read_steps(uint32_t *steps)
  */
 void lsm6ds3_read_temperature(float *temperature)
 {
+    if ( imu_state == NULL )
+    {
+        *temperature = 0.0F;
+        return;
+    }
+
     LOCK;
-    *temperature = _temperature;
+    *temperature = imu_state->temperature;
     UNLOCK;
 }
 
@@ -188,16 +216,21 @@ void lsm6ds3_task_acc_gyro( void )
     esp_err_t ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
     if (ret >= 0)
     {
+        if ( imu_state == NULL )
+        {
+            return;
+        }
+
         LOCK;
         const float gyroscaling = (2000.0F / 32768.0F);
-        gyro_x = ((float)((int16_t)( read_buffer[2] + ( (uint16_t)read_buffer[3] << 8 ) ))) * gyroscaling;
-        gyro_y = ((float)((int16_t)( read_buffer[4] + ( (uint16_t)read_buffer[5] << 8 ) ))) * gyroscaling;
-        gyro_z = ((float)((int16_t)( read_buffer[6] + ( (uint16_t)read_buffer[7] << 8 ) ))) * gyroscaling;
+        imu_state->gyro_x = ((float)((int16_t)( read_buffer[2] + ( (uint16_t)read_buffer[3] << 8 ) ))) * gyroscaling;
+        imu_state->gyro_y = ((float)((int16_t)( read_buffer[4] + ( (uint16_t)read_buffer[5] << 8 ) ))) * gyroscaling;
+        imu_state->gyro_z = ((float)((int16_t)( read_buffer[6] + ( (uint16_t)read_buffer[7] << 8 ) ))) * gyroscaling;
         /* 2g fsd, 1g = 9.80665m/s */
         const float accelscaling = (2.0F * 9.80665F) / 32768.0F;
-        acc_x = ((float)((int16_t)( read_buffer[8] + ( (uint16_t)read_buffer[9] << 8 ) ))) * accelscaling;
-        acc_y = ((float)((int16_t)( read_buffer[10] + ( (uint16_t)read_buffer[11] << 8 ) ))) * accelscaling;
-        acc_z = ((float)((int16_t)( read_buffer[12] + ( (uint16_t)read_buffer[13] << 8 ) ))) * accelscaling;
+        imu_state->acc_x = ((float)((int16_t)( read_buffer[8] + ( (uint16_t)read_buffer[9] << 8 ) ))) * accelscaling;
+        imu_state->acc_y = ((float)((int16_t)( read_buffer[10] + ( (uint16_t)read_buffer[11] << 8 ) ))) * accelscaling;
+        imu_state->acc_z = ((float)((int16_t)( read_buffer[12] + ( (uint16_t)read_buffer[13] << 8 ) ))) * accelscaling;
         UNLOCK;
     }
 }
@@ -214,8 +247,13 @@ void lsm6ds3_task_temperature( void )
     esp_err_t ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
     if (ret >= 0)
     {
+        if ( imu_state == NULL )
+        {
+            return;
+        }
+
         LOCK;
-        _temperature = (((float)((int16_t)(read_buffer[0] + ( (uint16_t)read_buffer[1] << 8 )))) * 0.001953125F) + 23.0F;
+        imu_state->temperature = (((float)((int16_t)(read_buffer[0] + ( (uint16_t)read_buffer[1] << 8 )))) * 0.001953125F) + 23.0F;
         UNLOCK;
     }
 }
@@ -232,8 +270,13 @@ void lsm6ds3_task_steps( void )
     esp_err_t ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
     if (ret >= 0)
     {
+        if ( imu_state == NULL )
+        {
+            return;
+        }
+
         LOCK;
-        _steps += read_buffer[0] + ( (uint16_t)read_buffer[1] << 8 );
+        imu_state->steps += read_buffer[0] + ( (uint16_t)read_buffer[1] << 8 );
         /* reset step count */
         buffer[0].len = 2;
         write_buffer[0] = CTRL10_C;
