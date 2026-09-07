@@ -2,7 +2,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "py/mperrno.h"
-#include "bmi270/bmi270.h"
+#include "tildagon_bmi270.h"
 #include "lsm6ds3.h"
 
 #include "tildagon_imu.h"
@@ -98,6 +98,7 @@ static char* id_list[MAX_DEVICES] =
 };
 
 which_imu_t imu = MAX_DEVICES;
+static tildagon_imu_state_t imu_state = { 0 };
 
 /* Handles into the i2c manager's job table, one per sensor group; -1 means
  * "not registered yet" (e.g. compass, before the frontboard registers it). */
@@ -124,11 +125,22 @@ void tildagon_imu_init( void )
     _Static_assert( IMU_NUM_GROUPS - 1 <= TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS,
                     "not enough i2c manager callback-job slots for all callback-based IMU groups" );
 
-    if ( bmi270_init() == ESP_OK )
+    imu_state.acc_x = 0.0F;
+    imu_state.acc_y = 0.0F;
+    imu_state.acc_z = 0.0F;
+    imu_state.gyro_x = 0.0F;
+    imu_state.gyro_y = 0.0F;
+    imu_state.gyro_z = 0.0F;
+    imu_state.temperature = 0.0F;
+    imu_state.steps = 0U;
+    imu_state.last_step_count = 0U;
+    imu_state.flags = 0U;
+
+    if ( bmi270_init(&imu_state) == ESP_OK )
     {
         imu = BMI270;
     }
-    else if ( lsm6ds3_init() == ESP_OK )
+    else if ( lsm6ds3_init(&imu_state) == ESP_OK )
     {
         imu = LSM6DS3;
     }

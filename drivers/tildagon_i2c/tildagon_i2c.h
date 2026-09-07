@@ -44,4 +44,9 @@ void tildagon_i2c_init();
 
 int tildagon_mux_i2c_transaction(tildagon_mux_i2c_obj_t *self_in, uint16_t addr, size_t n, mp_machine_i2c_buf_t *bufs, unsigned int flags);
 
+// Plain register access helpers used by sensor drivers.
+esp_err_t tildagon_i2c_reg_read(uint8_t port, uint16_t addr, uint8_t reg_addr, uint8_t *data, uint32_t len);
+esp_err_t tildagon_i2c_reg_write(uint8_t port, uint16_t addr, uint8_t reg_addr, const uint8_t *data, uint32_t len);
+
+
 #endif // _MICROPY_PY_TILDAGON_I2C
