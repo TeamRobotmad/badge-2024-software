@@ -33,6 +33,11 @@
       "name": "HexDrive2",
       "path": "sim/apps/BadgeBot/vendor/HexDrive2"
     }
+    ,
+    {
+      "name": "I2CTest",
+      "path": "sim/apps/i2c_test"
+    }
   ],
   "settings": {
     // These paths are relative to each workspace folder. They therefore hide
