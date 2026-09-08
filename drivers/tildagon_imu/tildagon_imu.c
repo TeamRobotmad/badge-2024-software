@@ -1,10 +1,8 @@
 
 #include "esp_err.h"
-#include "esp_log.h"
 #include "py/mperrno.h"
 #include "tildagon_bmi270.h"
 #include "lsm6ds3.h"
-
 #include "tildagon_imu.h"
 
 typedef enum
@@ -120,9 +118,10 @@ static void tildagon_imu_ensure_active( imu_group_t group, uint16_t legacy_perio
 void tildagon_imu_init( void )
 {
     /* One callback job per group here except the compass (registered
-     * separately as a step-based job, see qmc6309.c) - if this ever grows,
+     * separately as a step-based job, see qmc6309.c) which is offset by one job
+     * being taken up by the AW9523B driver - if this ever grows,
      * TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS must grow with it. */
-    _Static_assert( IMU_NUM_GROUPS - 1 <= TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS,
+    _Static_assert( IMU_NUM_GROUPS <= TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS,
                     "not enough i2c manager callback-job slots for all callback-based IMU groups" );
 
     imu_state.acc_x = 0.0F;
