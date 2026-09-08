@@ -208,11 +208,13 @@ int lsm6ds3_set_period(uint16_t period_ms)
  */
 void lsm6ds3_task_acc_gyro( void )
 {
-    /* read temperature, gyro and accelerometer together to reduce i2c traffic */
-    uint8_t write_buffer[1] = { OUT_GYRO_X_L };
-    uint8_t read_buffer[14] = { 0U };
-    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = write_buffer },
-                                       { .len = 14, .buf = read_buffer } };
+    /* Read the gyro and accelerometer registers as a contiguous 12-byte block.
+     * The first byte is the low byte of OUT_GYRO_X_L; the 12 bytes cover
+     * OUT_GYRO_X_L..OUT_ACC_Z_H and nothing else. */
+    uint8_t reg = OUT_GYRO_X_L;
+    uint8_t read_buffer[12] = { 0U };
+    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = &reg },
+                                       { .len = 12, .buf = read_buffer } };
     esp_err_t ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
     if (ret >= 0)
     {
@@ -223,14 +225,14 @@ void lsm6ds3_task_acc_gyro( void )
 
         LOCK;
         const float gyroscaling = (2000.0F / 32768.0F);
-        imu_state->gyro_x = ((float)((int16_t)( read_buffer[2] + ( (uint16_t)read_buffer[3] << 8 ) ))) * gyroscaling;
-        imu_state->gyro_y = ((float)((int16_t)( read_buffer[4] + ( (uint16_t)read_buffer[5] << 8 ) ))) * gyroscaling;
-        imu_state->gyro_z = ((float)((int16_t)( read_buffer[6] + ( (uint16_t)read_buffer[7] << 8 ) ))) * gyroscaling;
+        imu_state->gyro_x = ((float)((int16_t)( read_buffer[0] | ((uint16_t)read_buffer[1] << 8) ))) * gyroscaling;
+        imu_state->gyro_y = ((float)((int16_t)( read_buffer[2] | ((uint16_t)read_buffer[3] << 8) ))) * gyroscaling;
+        imu_state->gyro_z = ((float)((int16_t)( read_buffer[4] | ((uint16_t)read_buffer[5] << 8) ))) * gyroscaling;
         /* 2g fsd, 1g = 9.80665m/s */
         const float accelscaling = (2.0F * 9.80665F) / 32768.0F;
-        imu_state->acc_x = ((float)((int16_t)( read_buffer[8] + ( (uint16_t)read_buffer[9] << 8 ) ))) * accelscaling;
-        imu_state->acc_y = ((float)((int16_t)( read_buffer[10] + ( (uint16_t)read_buffer[11] << 8 ) ))) * accelscaling;
-        imu_state->acc_z = ((float)((int16_t)( read_buffer[12] + ( (uint16_t)read_buffer[13] << 8 ) ))) * accelscaling;
+        imu_state->acc_x = ((float)((int16_t)( read_buffer[6] | ((uint16_t)read_buffer[7] << 8) ))) * accelscaling;
+        imu_state->acc_y = ((float)((int16_t)( read_buffer[8] | ((uint16_t)read_buffer[9] << 8) ))) * accelscaling;
+        imu_state->acc_z = ((float)((int16_t)( read_buffer[10] | ((uint16_t)read_buffer[11] << 8) ))) * accelscaling;
         UNLOCK;
     }
 }
@@ -240,9 +242,9 @@ void lsm6ds3_task_acc_gyro( void )
  */
 void lsm6ds3_task_temperature( void )
 {
-    uint8_t write_buffer[2] = { OUT_TEMP_L, 0x16 };
+    uint8_t reg = OUT_TEMP_L;
     uint8_t read_buffer[2] = { 0U };
-    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = write_buffer },
+    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = &reg },
                                        { .len = 2, .buf = read_buffer } };
     esp_err_t ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
     if (ret >= 0)
@@ -253,7 +255,7 @@ void lsm6ds3_task_temperature( void )
         }
 
         LOCK;
-        imu_state->temperature = (((float)((int16_t)(read_buffer[0] + ( (uint16_t)read_buffer[1] << 8 )))) * 0.001953125F) + 23.0F;
+        imu_state->temperature = (((float)((int16_t)(read_buffer[0] | ((uint16_t)read_buffer[1] << 8)))) * 0.001953125F) + 23.0F;
         UNLOCK;
     }
 }
@@ -263,10 +265,10 @@ void lsm6ds3_task_temperature( void )
  */
 void lsm6ds3_task_steps( void )
 {
-    uint8_t write_buffer[2] = { STEP_COUNTER_L, 0x16 };
+    uint8_t reg = STEP_COUNTER_L;
     uint8_t read_buffer[2] = { 0U };
-    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = write_buffer },
-                                       { .len = 2, .buf = read_buffer } };
+    mp_machine_i2c_buf_t buffer[2] = { { .len = 1, .buf = &reg },
+                                       { .len = sizeof(read_buffer), .buf = read_buffer } };
     esp_err_t ret = tildagon_mux_i2c_transaction( mux_port, ADDRESS, 2, buffer, READ );
     if (ret >= 0)
     {
@@ -276,11 +278,11 @@ void lsm6ds3_task_steps( void )
         }
 
         LOCK;
-        imu_state->steps += read_buffer[0] + ( (uint16_t)read_buffer[1] << 8 );
-        /* reset step count */
-        buffer[0].len = 2;
-        write_buffer[0] = CTRL10_C;
-        tildagon_mux_i2c_transaction( mux_port, ADDRESS, 1, buffer, WRITE );
+        imu_state->steps += (uint16_t)read_buffer[0] | ((uint16_t)read_buffer[1] << 8);
+        /* Reset the step count by reasserting the pedometer enable value. */
+        uint8_t write_buffer[2] = { CTRL10_C, 0x14 };
+        mp_machine_i2c_buf_t reset_buffer = { .len = 2, .buf = write_buffer };
+        tildagon_mux_i2c_transaction( mux_port, ADDRESS, 1, &reset_buffer, WRITE );
         UNLOCK;
     }
 }
