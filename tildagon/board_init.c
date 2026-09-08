@@ -8,7 +8,7 @@
 #include "tildagon_usb.h"
 #include "tildagon_pin_mpless.h"
 
-static const char *TAG = "board_init";
+//static const char *TAG = "board_init";
 
 // This is the default startup handler for ESP32, does VFS and stuff
 void boardctrl_startup(void);
@@ -27,7 +27,7 @@ void tildagon_startup(void)
     //ESP_LOGI(TAG, "pins_init");
     tildagon_pins_init();
 
-    ESP_LOGI(TAG, "power_init");
+    //ESP_LOGI(TAG, "power_init");
     tildagon_power_init();
 
     //ESP_LOGI(TAG, "usb_init");
