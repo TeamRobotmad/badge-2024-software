@@ -335,7 +335,7 @@ void tildagon_i2c_mgr_init( void )
               (unsigned)sizeof(i2c_mgr_callback_job_t), (unsigned)TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS,
               (unsigned)sizeof(i2c_mgr_step_slot_t), (unsigned)TILDAGON_I2C_MGR_MAX_STEP_JOBS );
     job_mu = xSemaphoreCreateMutex();
-    xTaskCreate( i2c_mgr_task, "i2c_mgr", 4096, NULL, tskIDLE_PRIORITY + 5,
+    xTaskCreate( i2c_mgr_task, "i2c_mgr", 4096, NULL, tskIDLE_PRIORITY + 4,
                  &manager_task );
 }
 
