@@ -1,14 +1,11 @@
 #include "aw9523b.h"
 #include <assert.h>
 
-#include "esp_log.h"
 #include "tildagon_i2c.h"
 #include "tildagon_i2c_manager.h"
 
 #define READ ( MP_MACHINE_I2C_FLAG_WRITE1 | MP_MACHINE_I2C_FLAG_READ | MP_MACHINE_I2C_FLAG_STOP )
 #define WRITE MP_MACHINE_I2C_FLAG_STOP
-
-static const char *TAG = "aw9523b";
 
 static int8_t m_aw9523b_i2c_manager_job_handle = -1;
 
