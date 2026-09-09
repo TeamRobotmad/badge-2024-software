@@ -18,23 +18,23 @@ void tildagon_startup(void)
     // call the micropy default startup - does VFS init on ESP32
     boardctrl_startup();
 
-    ESP_LOGI(TAG, "i2c_init");
+    //ESP_LOGI(TAG, "i2c_init");
     tildagon_i2c_init();
 
-    ESP_LOGI(TAG, "i2c_mgr_init");
+    //ESP_LOGI(TAG, "i2c_mgr_init");
     tildagon_i2c_mgr_init();
 
-    ESP_LOGI(TAG, "pins_init");
+    //ESP_LOGI(TAG, "pins_init");
     tildagon_pins_init();
 
     //ESP_LOGI(TAG, "power_init");
     tildagon_power_init();
 
-    ESP_LOGI(TAG, "usb_init");
+    //ESP_LOGI(TAG, "usb_init");
     tildagon_usb_init();
 
-    ESP_LOGI(TAG, "imu_init");
+    //ESP_LOGI(TAG, "imu_init");
     tildagon_imu_init();
 
-    ESP_LOGI(TAG, "startup complete");
+    //ESP_LOGI(TAG, "startup complete");
 }
