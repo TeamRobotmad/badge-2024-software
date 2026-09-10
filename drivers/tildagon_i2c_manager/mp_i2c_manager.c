@@ -59,9 +59,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1( i2c_mgr_irq_dispatch_obj, i2c_mgr_irq_dispatch
  * missing an intermediate notification, and this is what stops a fast job
  * from flooding the fixed-size scheduler queue that every other feature
  * (e.g. Pin.irq) also shares. */
-static void i2c_mgr_job_notify( int handle, void *arg )
+static void i2c_mgr_job_notify( int handle )
 {
-    (void)arg;
     if ( !i2c_mgr_pending_get( handle ) )
     {
         i2c_mgr_pending_set( handle, true );

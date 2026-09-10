@@ -146,7 +146,7 @@ extern int64_t tildagon_i2c_mgr_read_into( int handle, uint8_t *dest, size_t des
  * once after every poll that successfully publishes new cache data - never
  * for a failed or CHECK-aborted poll. Do the minimum possible work here and
  * hand off the rest; this runs on a 4KB FreeRTOS task stack, not the caller's. */
-typedef void (*tildagon_i2c_mgr_notify_fn_t)( int handle, void *arg );
+typedef void (*tildagon_i2c_mgr_notify_fn_t)( int handle );
 
 /* Registers (fn non-NULL) or clears (fn NULL) a step-based job's data-ready
  * notification, replacing any previous one for this handle. Returns false if

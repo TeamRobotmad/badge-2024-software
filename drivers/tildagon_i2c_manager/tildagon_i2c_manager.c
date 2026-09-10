@@ -203,7 +203,7 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_step_slot_t *slot )
 
     if ( fn != NULL )
     {
-        fn( handle);
+        fn( handle );
     }
 
     /*
