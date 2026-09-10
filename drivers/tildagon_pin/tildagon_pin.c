@@ -437,5 +437,8 @@ MP_DEFINE_CONST_OBJ_TYPE(
     locals_dict, &tildagon_pin_locals_dict
     );
 
+// GPIO_EXT_NUM_MAX(64) pins x 2 edges. Must be a literal: this is scraped into
+// genhdr/root_pointers.h, which is included from mpstate.h without our headers.
 // All 4 banks can raise IRQs: bank 3 (frontboard) is chained via ext_pin[1]/iox_cb.
-MP_REGISTER_ROOT_POINTER(mp_obj_t tildagon_pin_irq_handler[GPIO_EXT_NUM_MAX*2]);
+_Static_assert(GPIO_EXT_NUM_MAX == 64, "tildagon_pin_irq_handler root pointer size is hard-coded to 64*2");
+MP_REGISTER_ROOT_POINTER(mp_obj_t tildagon_pin_irq_handler[64*2]);
