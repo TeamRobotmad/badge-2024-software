@@ -65,9 +65,8 @@ static i2c_mgr_step_slot_t step_jobs[TILDAGON_I2C_MGR_MAX_STEP_JOBS];
 /* Data-ready notification per step job (callback jobs have no notify - the
  * caller supplies its own callback directly), kept separate so the MP
  * binding layer can freely store/clear these without touching job state.
- * Indexed by step index (handle - MAX_CALLBACK_JOBS), not by handle. */
+ * Indexed by step-job index (handle - MAX_CALLBACK_JOBS), not by handle. */
 static tildagon_i2c_mgr_notify_fn_t notify_fn[TILDAGON_I2C_MGR_MAX_STEP_JOBS];
-static void *notify_arg[TILDAGON_I2C_MGR_MAX_STEP_JOBS];
 
 /* Protects scheduling state and cache publication. I2C runs unlocked; an
  * executing slot is withheld from reuse until its transaction completes. */
@@ -200,12 +199,11 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_step_slot_t *slot )
     slot->hdr.flags |= JOB_FLAG_VALID;
     i2c_mgr_set_status( &slot->hdr, TILDAGON_I2C_MGR_STATUS_SUCCESS );
     tildagon_i2c_mgr_notify_fn_t fn = notify_fn[step_idx];
-    void *arg = notify_arg[step_idx];
     JOB_UNLOCK;
 
     if ( fn != NULL )
     {
-        fn( handle, arg );
+        fn( handle);
     }
 
     /*
@@ -457,7 +455,6 @@ int tildagon_i2c_mgr_register_steps( uint8_t port, uint8_t i2c_addr,
                             (high_priority ? JOB_FLAG_HIGH_PRIORITY : 0);
             i2c_mgr_set_status( &step_jobs[i].hdr, TILDAGON_I2C_MGR_STATUS_IDLE );
             notify_fn[i] = NULL;
-            notify_arg[i] = NULL;
             handle = candidate;
             break;
         }
@@ -486,7 +483,6 @@ void tildagon_i2c_mgr_unregister( int handle )
         {
             int idx = handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS;
             notify_fn[idx] = NULL;
-            notify_arg[idx] = NULL;
         }
         JOB_UNLOCK;
         i2c_mgr_wake_task();
@@ -593,7 +589,7 @@ int tildagon_i2c_mgr_get_status( int handle )
     return status;
 }
 
-bool tildagon_i2c_mgr_set_notify( int handle, tildagon_i2c_mgr_notify_fn_t fn, void *arg )
+bool tildagon_i2c_mgr_set_notify( int handle, tildagon_i2c_mgr_notify_fn_t fn)
 {
     if ( handle < 0 || handle >= TILDAGON_I2C_MGR_MAX_JOBS || !i2c_mgr_is_step_handle( handle ) )
     {
@@ -606,7 +602,6 @@ bool tildagon_i2c_mgr_set_notify( int handle, tildagon_i2c_mgr_notify_fn_t fn, v
     {
         int idx = handle - TILDAGON_I2C_MGR_MAX_CALLBACK_JOBS;
         notify_fn[idx] = fn;
-        notify_arg[idx] = arg;
         ok = true;
     }
     JOB_UNLOCK;

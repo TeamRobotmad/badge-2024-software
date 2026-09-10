@@ -183,12 +183,12 @@ static mp_obj_t i2c_mgr_job_irq( size_t n_args, const mp_obj_t *args )
     if ( handler == mp_const_none )
     {
         MP_STATE_PORT(i2c_mgr_job_irq_handler)[index] = MP_OBJ_NULL;
-        tildagon_i2c_mgr_set_notify( index, NULL, NULL );
+        tildagon_i2c_mgr_set_notify( index, NULL);
     }
     else
     {
         MP_STATE_PORT(i2c_mgr_job_irq_handler)[index] = handler;
-        tildagon_i2c_mgr_set_notify( index, i2c_mgr_job_notify, NULL );
+        tildagon_i2c_mgr_set_notify( index, i2c_mgr_job_notify);
     }
     return mp_const_none;
 }

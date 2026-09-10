@@ -151,6 +151,6 @@ typedef void (*tildagon_i2c_mgr_notify_fn_t)( int handle, void *arg );
 /* Registers (fn non-NULL) or clears (fn NULL) a step-based job's data-ready
  * notification, replacing any previous one for this handle. Returns false if
  * the handle is invalid or not a step-based job. */
-extern bool tildagon_i2c_mgr_set_notify( int handle, tildagon_i2c_mgr_notify_fn_t fn, void *arg );
+extern bool tildagon_i2c_mgr_set_notify( int handle, tildagon_i2c_mgr_notify_fn_t fn);
 
 #endif /* TILDAGON_I2C_MANAGER_H */
