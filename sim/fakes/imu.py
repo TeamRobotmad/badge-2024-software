@@ -44,15 +44,15 @@ def gyro_read() -> Tuple[float, float, float]:
     return (4.0, 5.0, 6.0)
 
 
+def mag_read() -> Tuple[float, float, float]:
+    """
+    Returns current x, y, z magnetic field values.
+    """
+    return (1.0, 2.0, 3.0)
+
+
 def temperature_read() -> float:
     return 23.4
-
-
-def pressure_read() -> Tuple[float, float]:
-    """
-    Returns current pressure in Pa and temperature in degree C.
-    """
-    return (7.0, 8.0)
 
 
 def step_counter_read() -> int:

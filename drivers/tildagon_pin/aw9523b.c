@@ -8,8 +8,6 @@
 #define READ ( MP_MACHINE_I2C_FLAG_WRITE1 | MP_MACHINE_I2C_FLAG_READ | MP_MACHINE_I2C_FLAG_STOP )
 #define WRITE MP_MACHINE_I2C_FLAG_STOP
 
-static const char *TAG = "aw9523b";
-
 static int8_t m_aw9523b_i2c_manager_job_handle = -1;
 
 static void aw9523b_check_valid_pin(aw9523b_pin_t pin) {
