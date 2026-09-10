@@ -211,24 +211,14 @@ void aw9523b_pin_set_mode(aw9523b_device_t *dev, aw9523b_pin_t pin, aw9523b_pin_
     aw9523b_writeregs_via_i2c_manager(dev, reg, &dev->mode_values[port], 1);
 }
 
-void aw9523b_irq_register(aw9523b_device_t *dev, aw9523b_pin_t pin, aw9523b_irq_callback_t callback, void* args) {
+void aw9523b_irq_register(aw9523b_device_t *dev, aw9523b_pin_t pin, aw9523b_irq_callback_t callback) {
     aw9523b_check_valid_pin(pin);
-    uint8_t port = aw9523b_portnum(pin);
-    uint8_t pin_index = aw9523b_portpin(pin);
-
-    dev->irq_handlers[port][pin_index] = (aw9523b_irq_handler_t) {
-        .callback = callback,
-        .args = args
-    };
+    dev->irq_handlers[aw9523b_portnum(pin)][aw9523b_portpin(pin)] = callback;
 }
 
 void aw9523b_irq_unregister(aw9523b_device_t *dev, aw9523b_pin_t pin) {
     aw9523b_check_valid_pin(pin);
-    uint8_t port = aw9523b_portnum(pin);
-    dev->irq_handlers[port][pin] = (aw9523b_irq_handler_t) {
-        .callback = NULL,
-        .args = NULL
-    };
+    dev->irq_handlers[aw9523b_portnum(pin)][aw9523b_portpin(pin)] = NULL;
 }
 
 void aw9523b_irq_enable(aw9523b_device_t *dev, aw9523b_pin_t pin) {
@@ -267,7 +257,7 @@ void aw9523b_irq_handler(aw9523b_device_t *dev)
             {
                 uint8_t pin_mask = 1 << pin;
                 if ((~dev->irq_enables[port] & pin_mask & changed)
-                    && dev->irq_handlers[port][pin].callback )
+                    && dev->irq_handlers[port][pin] )
                 {
 
                     uint8_t event = GPIO_INTR_NEGEDGE;
@@ -275,7 +265,7 @@ void aw9523b_irq_handler(aw9523b_device_t *dev)
                     {
                         event = GPIO_INTR_POSEDGE;
                     }
-                    dev->irq_handlers[port][pin].callback(dev->irq_handlers[port][pin].args, event);
+                    dev->irq_handlers[port][pin]( dev, (aw9523b_pin_t)((port * 8) + pin), event );
                 }
             }
         }
