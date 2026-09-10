@@ -53,6 +53,17 @@ void tildagon_frontboard_init( uint16_t board_id )
         tildagon_imu_register_compass( compass_job_handle, qmc6309_read );
     }
     cy8cmbrx_init( tildagon_get_mux_obj( TILDAGON_TOP_I2C_PORT ) );
+
+    aw9523b_pin_set_direction( &ext_pin[3], int_clear, false );
+    aw9523b_pin_set_mode( &ext_pin[3], int_clear, AW9523B_PIN_MODE_GPIO );
+
+    aw9523b_pin_set_direction( &ext_pin[2], ls1, true );
+    aw9523b_irq_register( &ext_pin[2], ls1, cy8cmbrx_cb );
+    aw9523b_irq_enable( &ext_pin[2], ls1 );
+
+    /* reset flip flop */
+    aw9523b_pin_set_output( &ext_pin[3], int_clear, false );
+    aw9523b_pin_set_output( &ext_pin[3], int_clear, true );
 }
 
 /**
@@ -69,7 +80,9 @@ static void iox_cb ( aw9523b_device_t *dev __attribute__((unused)),
 /**
  * @brief callback for the cap sense
  */
-void cy8cmbrx_cb( void* args ,uint8_t event )
+void cy8cmbrx_cb( aw9523b_device_t *dev __attribute__((unused)),
+                  aw9523b_pin_t pin __attribute__((unused)),
+                  uint8_t event __attribute__((unused)) )
 {
     cy8cmbrx_status_t status = cy8cmbrx_run();
     /* push events */
