@@ -60,7 +60,7 @@ void tildagon_frontboard_init( uint16_t board_id )
     aw9523b_pin_set_mode( &ext_pin[3], int_clear, AW9523B_PIN_MODE_GPIO );
 
     aw9523b_pin_set_direction( &ext_pin[2], ls1, true );
-    aw9523b_irq_register( &ext_pin[2], ls1, cy8cmbrx_cb, NULL );
+    aw9523b_irq_register( &ext_pin[2], ls1, cy8cmbrx_cb );
     aw9523b_irq_enable( &ext_pin[2], ls1 );
 
     /* reset flip flop */
@@ -82,7 +82,9 @@ static void iox_cb ( aw9523b_device_t *dev __attribute__((unused)),
 /**
  * @brief callback for the cap sense
  */
-void cy8cmbrx_cb( void* args ,uint8_t event )
+void cy8cmbrx_cb( aw9523b_device_t *dev __attribute__((unused)),
+                  aw9523b_pin_t pin __attribute__((unused)),
+                  uint8_t event __attribute__((unused)) )
 {
     cy8cmbrx_status_t status = cy8cmbrx_run();
     /* reset flip flop */
