@@ -38,6 +38,11 @@
       "name": "I2CTest",
       "path": "sim/apps/i2c_test"
     }
+    ,
+    {
+      "name": "CanaryCO2",
+      "path": "sim/apps/canaryspansion"
+    }
   ],
   "settings": {
     // These paths are relative to each workspace folder. They therefore hide
