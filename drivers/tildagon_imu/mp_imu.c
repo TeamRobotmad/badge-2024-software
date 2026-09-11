@@ -79,8 +79,7 @@ static mp_obj_t mp_imu_temperature_read(void) {
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_imu_temperature_read_obj, mp_imu_temperature_read);
 
 static mp_obj_t mp_imu_id(void) {
-    static char* id;
-    id = tildagon_imu_get_id();
+    const char* id = tildagon_imu_get_id();
     return mp_obj_new_str(id, strlen(id));
 }
 

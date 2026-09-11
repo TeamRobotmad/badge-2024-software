@@ -19,67 +19,67 @@ typedef void (*tempfuncptr_t) ( float* temperature );
 typedef int  (*i2cfuncptr_t) ( uint8_t reg_addr, uint8_t *reg_data, uint8_t len );
 typedef int  (*periodfuncptr_t) ( uint16_t period_ms );
 
-i2cfuncptr_t i2c_write[MAX_DEVICES] =
+static const i2cfuncptr_t i2c_write[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_write,
     /* LSM6DS3 */  lsm6ds3_write,
 };
 
-i2cfuncptr_t i2c_read[MAX_DEVICES] =
+static const i2cfuncptr_t i2c_read[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_read,
     /* LSM6DS3 */  lsm6ds3_read,
 };
 
-periodfuncptr_t set_accel_gyro_period[MAX_DEVICES] =
+static const periodfuncptr_t set_accel_gyro_period[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_set_period,
     /* LSM6DS3 */  lsm6ds3_set_period,
 };
 
-updatefuncptr_t update_acc_gyro[MAX_DEVICES] =
+static const updatefuncptr_t update_acc_gyro[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_task_acc_gyro,
     /* LSM6DS3 */  lsm6ds3_task_acc_gyro,
 };
 
-updatefuncptr_t update_temperature[MAX_DEVICES] =
+static const updatefuncptr_t update_temperature[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_task_temperature,
     /* LSM6DS3 */  lsm6ds3_task_temperature,
 };
 
-updatefuncptr_t update_steps[MAX_DEVICES] =
+static const updatefuncptr_t update_steps[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_task_steps,
     /* LSM6DS3 */  lsm6ds3_task_steps,
 };
 
-sensorfuncptr_t accel_read[MAX_DEVICES] =
+static const sensorfuncptr_t accel_read[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_read_acc_mps,
     /* LSM6DS3 */  lsm6ds3_read_acc_mps,
 };
 
-sensorfuncptr_t gyro_read[MAX_DEVICES] =
+static const sensorfuncptr_t gyro_read[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_read_gyro_dps,
     /* LSM6DS3 */  lsm6ds3_read_gyro_dps,
 };
 
-stepfuncptr_t step_read[MAX_DEVICES] =
+static const stepfuncptr_t step_read[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_read_steps,
     /* LSM6DS3 */  lsm6ds3_read_steps,
 };
 
-stepresetfuncptr_t step_reset[MAX_DEVICES] =
+static const stepresetfuncptr_t step_reset[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_reset_steps,
     /* LSM6DS3 */  NULL,  /* resets its count on each read, no explicit reset */
 };
 
-tempfuncptr_t temp_read[MAX_DEVICES] =
+static const tempfuncptr_t temp_read[MAX_DEVICES] =
 {
     /* BMI270 */   bmi270_read_temperature,
     /* LSM6DS3 */  lsm6ds3_read_temperature,
@@ -87,20 +87,20 @@ tempfuncptr_t temp_read[MAX_DEVICES] =
 
 static sensorfuncptr_t compass_readptr = NULL;
 
-static char bmi270_id[] = "bmi270";
-static char lsm6ds3_id[] = "lsm6ds3";
-static char* id_list[MAX_DEVICES] =
+static const char bmi270_id[] = "bmi270";
+static const char lsm6ds3_id[] = "lsm6ds3";
+static const char *const id_list[MAX_DEVICES] =
 {
     /* BMI270 */  bmi270_id,
     /* LSM6DS3 */ lsm6ds3_id,
 };
 
-which_imu_t imu = MAX_DEVICES;
+static uint8_t imu = MAX_DEVICES;
 static tildagon_imu_state_t imu_state = { 0 };
 
 /* Handles into the i2c manager's job table, one per sensor group; -1 means
  * "not registered yet" (e.g. compass, before the frontboard registers it). */
-static int job_handle[IMU_NUM_GROUPS] = { -1, -1, -1, -1 };
+static int8_t job_handle[IMU_NUM_GROUPS] = { -1, -1, -1, -1 };
 
 /* Auto-starts a group at a legacy default rate the first time it is read, if
  * nothing has explicitly configured a period for it yet. This preserves
@@ -220,7 +220,7 @@ void tildagon_imu_temperature_read( float* temperature )
     }
 }
 
-char* tildagon_imu_get_id( void )
+const char* tildagon_imu_get_id( void )
 {
     if ( imu < MAX_DEVICES )
     {
@@ -228,7 +228,7 @@ char* tildagon_imu_get_id( void )
     }
     else
     {
-        static char no_device[] = "no device present";
+        static const char no_device[] = "no device present";
         return no_device;
     }
 }
