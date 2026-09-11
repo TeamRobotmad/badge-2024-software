@@ -43,6 +43,14 @@ typedef void (*tildagon_i2c_mgr_job_fn_t)( void );
 
 typedef enum
 {
+    TILDAGON_I2C_MGR_PHASE_RUN,
+    TILDAGON_I2C_MGR_PHASE_COMPLETE,
+} tildagon_i2c_mgr_phase_t;
+
+typedef void (*tildagon_i2c_mgr_phased_job_fn_t)( tildagon_i2c_mgr_phase_t phase );
+
+typedef enum
+{
     TILDAGON_I2C_MGR_STEP_READ = 0,
     TILDAGON_I2C_MGR_STEP_WRITE = 1,
     TILDAGON_I2C_MGR_STEP_CHECK = 2,
@@ -88,6 +96,12 @@ extern void tildagon_i2c_mgr_init( void );
  * if the period is invalid or the job table is full. */
 extern int tildagon_i2c_mgr_register( tildagon_i2c_mgr_job_fn_t callback,
                                       uint16_t period_ms, bool high_priority );
+
+/* As above, but invokes callback first with TILDAGON_I2C_MGR_PHASE_RUN, then
+ * with TILDAGON_I2C_MGR_PHASE_COMPLETE after the manager has published the
+ * final status and made a one-shot job re-armable. */
+extern int tildagon_i2c_mgr_register_phased( tildagon_i2c_mgr_phased_job_fn_t callback,
+                                             uint16_t period_ms, bool high_priority );
 
 /* Registers a generic multi-step job (for hexpansion sensors etc.) that the
  * manager's background task executes directly - no per-sensor C code
