@@ -9,10 +9,10 @@ STEPS = 4
 OFF = 0
 
 _periods = {
-    ACCEL_GYRO: 100,
-    TEMPERATURE: 100,
-    COMPASS: 100,
-    STEPS: 100,
+    ACCEL_GYRO: 40,
+    TEMPERATURE: 1000,
+    COMPASS: 40,
+    STEPS: 1000,
 }
 
 

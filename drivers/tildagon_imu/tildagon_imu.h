@@ -47,6 +47,7 @@ extern void tildagon_imu_temperature_read( float* temperature );
 extern char* tildagon_imu_get_id( void );
 extern int tildagon_imu_write( uint8_t address, uint8_t length, uint8_t* buffer );
 extern int tildagon_imu_read( uint8_t address, uint8_t length, uint8_t* buffer );
+extern bool tildagon_imu_compass_available( void );
 extern void tildagon_imu_register_compass( int compass_job_handle, sensorfuncptr_t compass_read );
 extern void tildagon_imu_compass_read( float* x, float*y, float*z );
 

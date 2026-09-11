@@ -1,14 +1,22 @@
 #include "aw9523b.h"
 #include <assert.h>
 
-#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+
 #include "tildagon_i2c.h"
 #include "tildagon_i2c_manager.h"
+#include "esp_err.h"
+//#include "esp_log.h"
 
 #define READ ( MP_MACHINE_I2C_FLAG_WRITE1 | MP_MACHINE_I2C_FLAG_READ | MP_MACHINE_I2C_FLAG_STOP )
 #define WRITE MP_MACHINE_I2C_FLAG_STOP
 
+//static const char *TAG = "aw9523b";
+
 static int8_t m_aw9523b_i2c_manager_job_handle = -1;
+static SemaphoreHandle_t m_aw9523b_i2c_manager_job_sem = NULL;
 
 static void aw9523b_check_valid_pin(aw9523b_pin_t pin) {
     assert(pin <= 15);
@@ -49,28 +57,41 @@ typedef struct {
 static aw9523b_single_reg_write_t m_aw9523b_single_reg_write;
 
 static esp_err_t aw9523b_writeregs_via_i2c_manager(aw9523b_device_t *dev, uint8_t reg, const uint8_t *regs, size_t nregs) {
-    if (nregs > 1) {
+    if ((nregs > 1) || (m_aw9523b_i2c_manager_job_sem == NULL) || (m_aw9523b_i2c_manager_job_handle < 0)) {
         return aw9523b_writeregs(dev, reg, regs, nregs);
     }
-    // check the status of the job (i.e. has any previous write completed)
-    tildagon_i2c_mgr_status_t status = tildagon_i2c_mgr_get_status(m_aw9523b_i2c_manager_job_handle);
-    while (status == TILDAGON_I2C_MGR_STATUS_PENDING) {
-        status = tildagon_i2c_mgr_get_status(m_aw9523b_i2c_manager_job_handle);
-        // small delay here to avoid busy-waiting too aggressively
-        vTaskDelay(pdMS_TO_TICKS(1));
+    if (xSemaphoreTake(m_aw9523b_i2c_manager_job_sem, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
     }
     m_aw9523b_single_reg_write.reg = reg;
     m_aw9523b_single_reg_write.value = regs[0];
     m_aw9523b_single_reg_write.i2c_addr = (uint8_t)dev->i2c_addr;
     m_aw9523b_single_reg_write.mux_port = (uint8_t)dev->mux->port;
 
-    tildagon_i2c_mgr_run_once(m_aw9523b_i2c_manager_job_handle);
+    //ESP_LOGI(TAG, "Arm: reg=0x%02X, value=0x%02X", m_aw9523b_single_reg_write.reg, m_aw9523b_single_reg_write.value);
+    if (!tildagon_i2c_mgr_run_once(m_aw9523b_i2c_manager_job_handle)) {
+        //ESP_LOGW(TAG, "Failed to arm run once job - giving semaphore");
+        xSemaphoreGive(m_aw9523b_i2c_manager_job_sem);
+        return aw9523b_writeregs(dev, reg, regs, nregs);
+    }
     return ESP_OK;
 }
 
+
 // callback for the i2c manager to write single registers e.g. to set pin states
-void aw9523b_writereg_handler( void )
+// Two phases:
+// - run - to do the actual I2C write,
+// - complete - to release the semaphore only AFTER the i2c_manager has finished the transaction
+// otherwise we can try to start another i2c_manager job while the previous one is still running
+void aw9523b_writereg_handler(tildagon_i2c_mgr_phase_t phase)
 {
+    if ((phase == TILDAGON_I2C_MGR_PHASE_COMPLETE) && (m_aw9523b_i2c_manager_job_sem)) {
+        xSemaphoreGive(m_aw9523b_i2c_manager_job_sem);
+        return;
+    }
+
+    // TILDAGON_I2C_MGR_PHASE_RUN
+    //ESP_LOGI(TAG, "Write reg=0x%02X, value=0x%02X", m_aw9523b_single_reg_write.reg, m_aw9523b_single_reg_write.value);
     uint8_t buffer_data[2] = { m_aw9523b_single_reg_write.reg, m_aw9523b_single_reg_write.value };
     mp_machine_i2c_buf_t buffer[1] = { { .len = sizeof(buffer_data), .buf = buffer_data } };
     tildagon_mux_i2c_obj_t *mux = tildagon_get_mux_obj(m_aw9523b_single_reg_write.mux_port);
@@ -78,6 +99,7 @@ void aw9523b_writereg_handler( void )
     tildagon_mux_i2c_transaction(mux, m_aw9523b_single_reg_write.i2c_addr, 1,
                                 (mp_machine_i2c_buf_t *)&buffer, WRITE );
 }
+
 
 /* The default output values of the AW9523B depend on its I2C address */
 const uint8_t aw9523b_default_output_values[4][2] = {{ 0x00U, 0x00U }, { 0x0FU, 0x0FU }, { 0xF0U, 0xF0U }, { 0xFFU, 0xFFU }};
@@ -109,9 +131,16 @@ void aw9523b_init(aw9523b_device_t *dev)
     dev->mode_values[1] = 0xFFU;
 
     // register a callback job with the i2c manager for use in writing single registers
-    if (m_aw9523b_i2c_manager_job_handle == -1) {
-        m_aw9523b_i2c_manager_job_handle = (int8_t)tildagon_i2c_mgr_register( aw9523b_writereg_handler, TILDAGON_I2C_MGR_PERIOD_OFF, true );
-        assert(m_aw9523b_i2c_manager_job_handle >= 0);
+    if (m_aw9523b_i2c_manager_job_handle < 0) {
+        m_aw9523b_i2c_manager_job_handle = (int8_t)tildagon_i2c_mgr_register_phased(
+            aw9523b_writereg_handler, TILDAGON_I2C_MGR_PERIOD_OFF, true );
+    }
+    if (m_aw9523b_i2c_manager_job_sem == NULL) {
+        m_aw9523b_i2c_manager_job_sem = xSemaphoreCreateBinary();
+        if (m_aw9523b_i2c_manager_job_sem) {
+            //ESP_LOGI(TAG, "Creating and giving semaphore");
+            xSemaphoreGive(m_aw9523b_i2c_manager_job_sem);
+        }
     }
 }
 

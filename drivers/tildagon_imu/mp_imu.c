@@ -34,6 +34,11 @@ static mp_obj_t mp_imu_gyro_read(void) {
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_imu_gyro_read_obj, mp_imu_gyro_read);
 
 static mp_obj_t mp_imu_mag_read(void) {
+    if ( !tildagon_imu_compass_available() )
+    {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("compass is not available on this board"));
+    }
+
     static float x, y, z;
 
     // Will not overwrite old data if there is an error
