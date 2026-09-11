@@ -257,6 +257,11 @@ int tildagon_imu_read( uint8_t address, uint8_t length, uint8_t* buffer )
     }
 }
 
+bool tildagon_imu_compass_available( void )
+{
+    return ( compass_readptr != NULL && job_handle[IMU_GROUP_COMPASS] >= 0 );
+}
+
 void tildagon_imu_register_compass( int compass_job_handle, sensorfuncptr_t compass_read )
 {
     compass_readptr = compass_read;
@@ -265,11 +270,16 @@ void tildagon_imu_register_compass( int compass_job_handle, sensorfuncptr_t comp
 
 void tildagon_imu_compass_read( float* x, float*y, float*z )
 {
-    tildagon_imu_ensure_active( IMU_GROUP_COMPASS, IMU_UPDATE_FAST_PERIOD_MS );
-    if ( compass_readptr != NULL )
+    if ( !tildagon_imu_compass_available() )
     {
-        compass_readptr( x, y, z );
+        *x = 0.0F;
+        *y = 0.0F;
+        *z = 0.0F;
+        return;
     }
+
+    tildagon_imu_ensure_active( IMU_GROUP_COMPASS, IMU_UPDATE_FAST_PERIOD_MS );
+    compass_readptr( x, y, z );
 }
 
 bool tildagon_imu_set_period( imu_group_t group, uint16_t period_ms, bool force )
