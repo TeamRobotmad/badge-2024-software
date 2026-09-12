@@ -159,7 +159,7 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_step_slot_t *slot )
         {
             case TILDAGON_I2C_MGR_STEP_READ:
             {
-                esp_err_t err = tildagon_i2c_reg_read( step_job->port, step_job->i2c_addr, step->a,
+                esp_err_t err = tildagon_i2c_reg_read( step_job->port, step_job->i2c_addr, (uint8_t)step->a,
                                                         &local_cache[offset], step->b );
                 if ( err != ESP_OK )
                 {
@@ -173,9 +173,21 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_step_slot_t *slot )
                 offset += step->b;
                 break;
             }
+            case TILDAGON_I2C_MGR_STEP_READ16:
+            {
+                esp_err_t err = tildagon_i2c_reg16_read( step_job->port, step_job->i2c_addr, step->a,
+                                                         &local_cache[offset], step->b );
+                if ( err != ESP_OK )
+                {
+                    i2c_mgr_finish_attempt( &slot->hdr, TILDAGON_I2C_MGR_STATUS_I2C_ERROR );
+                    return;
+                }
+                offset += step->b;
+                break;
+            }
             case TILDAGON_I2C_MGR_STEP_WRITE:
             {
-                esp_err_t err = tildagon_i2c_reg_write( step_job->port, step_job->i2c_addr, step->a,
+                esp_err_t err = tildagon_i2c_reg_write( step_job->port, step_job->i2c_addr, (uint8_t)step->a,
                                                          step->data, step->b );
                 if ( err != ESP_OK )
                 {
@@ -183,6 +195,17 @@ static void i2c_mgr_run_step_job( int handle, i2c_mgr_step_slot_t *slot )
                     ESP_LOGI( TAG, "job %d step %d WRITE reg 0x%02X len %d failed: 0x%x",
                               handle, s, step->a, step->b, err );
                     */
+                    i2c_mgr_finish_attempt( &slot->hdr, TILDAGON_I2C_MGR_STATUS_I2C_ERROR );
+                    return;
+                }
+                break;
+            }
+            case TILDAGON_I2C_MGR_STEP_WRITE16:
+            {
+                esp_err_t err = tildagon_i2c_reg16_write( step_job->port, step_job->i2c_addr, step->a,
+                                                          step->data, step->b );
+                if ( err != ESP_OK )
+                {
                     i2c_mgr_finish_attempt( &slot->hdr, TILDAGON_I2C_MGR_STATUS_I2C_ERROR );
                     return;
                 }
@@ -466,9 +489,11 @@ int tildagon_i2c_mgr_register_steps( uint8_t port, uint8_t i2c_addr,
         switch ( (tildagon_i2c_mgr_step_type_t)steps[s].type )
         {
             case TILDAGON_I2C_MGR_STEP_READ:
+            case TILDAGON_I2C_MGR_STEP_READ16:
                 cache_len += steps[s].b;
                 break;
             case TILDAGON_I2C_MGR_STEP_WRITE:
+            case TILDAGON_I2C_MGR_STEP_WRITE16:
                 if ( steps[s].b > TILDAGON_I2C_MGR_MAX_STEP_BYTES )
                 {
                     ESP_LOGW( TAG, "register_steps: invalid WRITE length %u", steps[s].b );

@@ -270,16 +270,37 @@ static mp_obj_t i2c_mgr_add_job( size_t n_args, const mp_obj_t *pos_args, mp_map
         mp_int_t type = mp_obj_get_int( item[0] );
         mp_int_t a = mp_obj_get_int( item[1] );
         mp_int_t b = mp_obj_get_int( item[2] );
-        if ( type < TILDAGON_I2C_MGR_STEP_READ || type > TILDAGON_I2C_MGR_STEP_CHECK ||
-             a < 0 || a > UINT8_MAX || b < 0 || b > UINT8_MAX )
+        if ( type < TILDAGON_I2C_MGR_STEP_READ || type > TILDAGON_I2C_MGR_STEP_WRITE16 ||
+             b < 0 || b > UINT8_MAX )
         {
             mp_raise_ValueError( MP_ERROR_TEXT("invalid step field") );
         }
+        if ( type == TILDAGON_I2C_MGR_STEP_READ || type == TILDAGON_I2C_MGR_STEP_WRITE )
+        {
+            if ( a < 0 || a > UINT8_MAX )
+            {
+                mp_raise_ValueError( MP_ERROR_TEXT("invalid step field") );
+            }
+        }
+        else if ( type == TILDAGON_I2C_MGR_STEP_READ16 || type == TILDAGON_I2C_MGR_STEP_WRITE16 )
+        {
+            if ( a < 0 || a > UINT16_MAX )
+            {
+                mp_raise_ValueError( MP_ERROR_TEXT("invalid step field") );
+            }
+        }
+        else if ( type == TILDAGON_I2C_MGR_STEP_CHECK )
+        {
+            if ( a < 0 || a > UINT8_MAX )
+            {
+                mp_raise_ValueError( MP_ERROR_TEXT("invalid step field") );
+            }
+        }
         steps[i].type = (uint8_t)type;
-        steps[i].a = (uint8_t)a;
+        steps[i].a = (uint16_t)a;
         steps[i].b = (uint8_t)b;
 
-        if ( type == TILDAGON_I2C_MGR_STEP_WRITE )
+        if ( type == TILDAGON_I2C_MGR_STEP_WRITE || type == TILDAGON_I2C_MGR_STEP_WRITE16 )
         {
             if ( item_len < 4 )
             {
@@ -330,6 +351,8 @@ static const mp_rom_map_elem_t i2c_mgr_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_READ), MP_ROM_INT(TILDAGON_I2C_MGR_STEP_READ) },
     { MP_ROM_QSTR(MP_QSTR_WRITE), MP_ROM_INT(TILDAGON_I2C_MGR_STEP_WRITE) },
     { MP_ROM_QSTR(MP_QSTR_CHECK), MP_ROM_INT(TILDAGON_I2C_MGR_STEP_CHECK) },
+    { MP_ROM_QSTR(MP_QSTR_READ16), MP_ROM_INT(TILDAGON_I2C_MGR_STEP_READ16) },
+    { MP_ROM_QSTR(MP_QSTR_WRITE16), MP_ROM_INT(TILDAGON_I2C_MGR_STEP_WRITE16) },
     { MP_ROM_QSTR(MP_QSTR_OFF), MP_ROM_INT(TILDAGON_I2C_MGR_PERIOD_OFF) },
     { MP_ROM_QSTR(MP_QSTR_MIN_PERIOD_MS), MP_ROM_INT(TILDAGON_I2C_MGR_MIN_PERIOD_MS) },
     { MP_ROM_QSTR(MP_QSTR_STATUS_IDLE), MP_ROM_INT(TILDAGON_I2C_MGR_STATUS_IDLE) },
