@@ -245,17 +245,40 @@ not be safe, which is why there is no separate call to do that.)
 ### Job steps
 
 A job is a short list of steps, executed in order against the same port and
-address every time the job's period elapses. There are three kinds:
+address every time the job's period elapses. There are five kinds:
 
 | Step | Meaning |
 | --- | --- |
 | `(i2c_mgr.READ, reg, length)` | Read `length` bytes from register `reg`, appending them to the job's cache after any earlier `READ` steps. |
 | `(i2c_mgr.WRITE, reg, length, data)` | Write `length` bytes from `data` to register `reg`. `data` must be a bytes-like object of exactly `length` bytes. |
+| `(i2c_mgr.READ16, reg, length)` | As `READ`, but send `reg` as a 16-bit address, most-significant byte first. |
+| `(i2c_mgr.WRITE16, reg, length, data)` | As `WRITE`, but send `reg` as a 16-bit address, most-significant byte first. |
 | `(i2c_mgr.CHECK, offset, mask, value)` | Abort this poll if `(cache[offset] & mask) == value`. |
 
-`WRITE` steps are how you re-trigger a sensor that needs a "start measurement"
-command each cycle. `CHECK` steps are how you avoid publishing garbage from a
-sensor that has not finished converting yet.
+`WRITE` and `WRITE16` steps are how you re-trigger a sensor that needs a "start
+measurement" command each cycle. `CHECK` steps are how you avoid publishing
+garbage from a sensor that has not finished converting yet.
+
+The `16` in `READ16` and `WRITE16` describes the register **address**, not the
+data. Use these steps for devices such as the SCD4X that send a two-byte command
+or register address. `length` still gives the number of data bytes to read or
+write, and those bytes are cached unchanged:
+
+```python
+job = i2c_mgr.add_job(
+    PORT,
+    ADDR,
+    (
+        (i2c_mgr.READ16, 0xE4B8, 3),
+        (i2c_mgr.CHECK, 1, 0xFF, 0x00),
+        (i2c_mgr.READ16, 0xEC05, 9),
+    ),
+    period_ms=1000,
+)
+```
+
+The existing `READ` and `WRITE` steps accept register addresses from `0x00` to
+`0xFF`; `READ16` and `WRITE16` accept addresses from `0x0000` to `0xFFFF`.
 
 ### A typical single-shot sensor
 
@@ -290,10 +313,10 @@ Doing this check inside the job rather than in Python means an unready sensor
 costs a single byte on the bus and never wakes your app at all.
 
 !!! note "Cache offsets refer to `READ` bytes only"
-    The cache is the concatenation of every `READ` step's bytes, in order.
-    `WRITE` and `CHECK` steps contribute nothing to it. In the example above the
-    status byte is at offset 0 and the result at offsets 1 and 2, so the buffer
-    you pass to `read_into()` needs to be 3 bytes.
+    The cache is the concatenation of every `READ` and `READ16` step's bytes, in
+    order. `WRITE`, `WRITE16`, and `CHECK` steps contribute nothing to it. In
+    the example above the status byte is at offset 0 and the result at offsets
+    1 and 2, so the buffer you pass to `read_into()` needs to be 3 bytes.
 
 ### One-shot jobs
 
@@ -384,7 +407,7 @@ After this the `Job` object is inert and its slot can be reused.
 | Name | Description |
 | --- | --- |
 | `add_job(port, addr, steps, period_ms=None, high_priority=False)` | Registers a step-based job. Returns a `Job`, or `None` if the table is full. |
-| `READ`, `WRITE`, `CHECK` | Step type constants. |
+| `READ`, `WRITE`, `READ16`, `WRITE16`, `CHECK` | Step type constants. `READ16` and `WRITE16` use 16-bit register addresses. |
 | `OFF` | Sentinel meaning "not polled". Equivalent to passing `None`. |
 | `MIN_PERIOD_MS` | Minimum recurring period (10 ms). |
 | `STATUS_IDLE`, `STATUS_PENDING`, `STATUS_SUCCESS`, `STATUS_CHECK_ABORTED`, `STATUS_I2C_ERROR` | Values returned by `Job.get_status()`. |
@@ -428,14 +451,15 @@ The manager is deliberately allocation-free, so everything is a fixed size:
 | --- | --- |
 | Total jobs on the badge | 10 (shared with the firmware's own jobs) |
 | Steps per job | 5 |
-| Bytes per `WRITE` step | 4 |
-| Total `READ` bytes per job (cache size) | 32 |
+| Bytes per `WRITE` or `WRITE16` step | 4 |
+| Total `READ` and `READ16` bytes per job (cache size) | 32 |
 | Period range | 10–65534 ms, or `None` for off |
 
 `add_job()` raises `ValueError` for a bad step count, a malformed step tuple, a
-`WRITE` whose data length does not match its declared length, a port outside
-0–7, or an address that is not 7-bit. It returns `None` — rather than raising —
-when the job table is full, so check the result.
+`WRITE` or `WRITE16` whose data length does not match its declared length, a
+register address outside the range for its step type, a port outside 0–7, or a
+device address that is not 7-bit. It returns `None` — rather than raising — when
+the job table is full, so check the result.
 
 ## Writing apps that also run on older firmware
 

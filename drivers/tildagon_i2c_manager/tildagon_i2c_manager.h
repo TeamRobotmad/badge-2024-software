@@ -54,6 +54,8 @@ typedef enum
     TILDAGON_I2C_MGR_STEP_READ = 0,
     TILDAGON_I2C_MGR_STEP_WRITE = 1,
     TILDAGON_I2C_MGR_STEP_CHECK = 2,
+    TILDAGON_I2C_MGR_STEP_READ16 = 3,
+    TILDAGON_I2C_MGR_STEP_WRITE16 = 4,
 } tildagon_i2c_mgr_step_type_t;
 
 typedef enum
@@ -67,20 +69,23 @@ typedef enum
 
 /* One step of a generic multi-step job (see tildagon_i2c_mgr_register_steps
  * below). Field meaning depends on `type`:
- *   READ:  a = register address, b = number of bytes to read; the bytes are
- *          appended to the job's cache after any earlier READ steps' bytes.
- *   WRITE: a = register address, b = number of bytes to write, data[0..b-1]
- *          = the bytes to write.
- *   CHECK: a = byte offset into the cache so far (from an earlier READ step
- *          in this same job), b = mask, data[0] = comparison value. If
- *          (cache[a] & b) == data[0], the rest of the job is skipped for
- *          this poll - the published cache and sequence number are left
- *          untouched (this is not treated as an error). */
+ *   READ:     a = register address (low 8 bits used), b = number of bytes to
+ *             read; the bytes are appended to the job's cache after any earlier
+ *             READ steps' bytes.
+ *   READ16:   a = 16-bit register address, b = number of bytes to read.
+ *   WRITE:    a = register address (low 8 bits used), b = number of bytes to
+ *             write, data[0..b-1] = the bytes to write.
+ *   WRITE16:  a = 16-bit register address, b = number of bytes to write.
+ *   CHECK:    a = byte offset into the cache so far (from an earlier READ step
+ *             in this same job), b = mask, data[0] = comparison value. If
+ *             (cache[a] & b) == data[0], the rest of the job is skipped for
+ *             this poll - the published cache and sequence number are left
+ *             untouched (this is not treated as an error). */
 typedef struct
 {
     uint8_t type;
-    uint8_t a;
     uint8_t b;
+    uint16_t a;
     uint8_t data[TILDAGON_I2C_MGR_MAX_STEP_BYTES];
 } tildagon_i2c_mgr_step_t;
 
