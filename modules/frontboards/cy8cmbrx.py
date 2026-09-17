@@ -158,6 +158,7 @@ cy8cmbr3116_config = [
 
 def cy8cmbr3116_init():
     import time
+
     top = I2C(0)
     scan_count = 0
     while True:
