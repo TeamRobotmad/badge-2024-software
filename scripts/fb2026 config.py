@@ -239,14 +239,7 @@ CY8CMBRX_ATH_EN | CY8CMBRX_GUARD_EN, #0x4F DEVICE_CFG2
 
 def cy8cmbr3116_init():
     top = I2C(0)
-    scan_count = 0
-    while True:
-        scan = top.scan(0x37)
-        if 0x37 in scan:
-            break
-        scan_count += 1
-        if scan_count > 100:
-            raise Exception("cy8cmbr3116 not detected")
+    top.scan(0x37)  # Wake up the device
     device_crc = top.readfrom_mem(0x37, 0x7E, 2)
     # could look for a calibration file and alter the config to apply it
     config_crc = cy8cmbr_crc(cy8cmbr3116_config)
