@@ -61,7 +61,7 @@ void tildagon_frontboard_init( uint16_t board_id )
     aw9523b_pin_set_mode( &ext_pin[3], int_clear, AW9523B_PIN_MODE_GPIO );
     
     aw9523b_pin_set_direction( &ext_pin[2], ls1, true );
-    aw9523b_irq_register( &ext_pin[2], ls1, cy8cmbrx_cb, NULL );
+    aw9523b_irq_register( &ext_pin[2], ls1, cy8cmbrx_cb);
     aw9523b_irq_enable( &ext_pin[2], ls1 );  
  
     /* reset flip flop */
