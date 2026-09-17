@@ -118,10 +118,10 @@ void tildagon_pins_generate_isr( void )
     }
 }
 
-static void tildagon_pin_isr_handler(void *arg, uint8_t event)
+static void tildagon_pin_isr_handler(aw9523b_device_t *dev, aw9523b_pin_t pin, uint8_t event)
 {
-    tildagon_pin_obj_t *self = arg;
-    uint8_t index = PIN_OBJ_PTR_INDEX(self);
+    uint8_t index = (uint8_t)(((dev - ext_pin) * 16) + pin);
+    const tildagon_pin_obj_t *self = &tildagon_pin_obj_table[index];
     if ( event == GPIO_INTR_NEGEDGE )
     {
         index += GPIO_EXT_NUM_MAX;
@@ -129,7 +129,7 @@ static void tildagon_pin_isr_handler(void *arg, uint8_t event)
     mp_obj_t handler = MP_STATE_PORT(tildagon_pin_irq_handler)[index];
     if (handler != NULL)
     {
-        mp_sched_schedule(handler, MP_OBJ_FROM_PTR(self));
+        mp_sched_schedule(handler, MP_OBJ_FROM_PTR((tildagon_pin_obj_t *)self));
     }
 }
 
@@ -311,7 +311,7 @@ static mp_obj_t tildagon_pin_irq(size_t n_args, const mp_obj_t *pos_args, mp_map
         mp_uint_t trigger = args[ARG_trigger].u_int;
         if (handler != mp_const_none) 
         {
-            aw9523b_irq_register(dev, pin, tildagon_pin_isr_handler, self);
+            aw9523b_irq_register(dev, pin, tildagon_pin_isr_handler);
             aw9523b_irq_enable(dev, pin);
         } 
         else 
