@@ -82,7 +82,9 @@ static void iox_cb ( aw9523b_device_t *dev __attribute__((unused)),
 /**
  * @brief callback for the cap sense 
  */
-void cy8cmbrx_cb( void* args ,uint8_t event )
+void cy8cmbrx_cb( aw9523b_device_t *dev __attribute__((unused)),
+                   aw9523b_pin_t pin __attribute__((unused)),
+                   uint8_t event __attribute__((unused)) )
 {
     cy8cmbrx_status_t status = cy8cmbrx_run();
     /* reset flip flop */
