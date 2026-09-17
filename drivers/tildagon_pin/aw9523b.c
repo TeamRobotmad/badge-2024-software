@@ -287,7 +287,7 @@ void aw9523b_irq_handler(aw9523b_device_t *dev)
             {
                 uint8_t pin_mask = 1 << pin;
                 if ((~dev->irq_enables[port] & pin_mask & changed)
-                    && dev->irq_handlers[port][pin] )
+                    && dev->irq_handlers[port][pin].callback )
                 {
 
                     uint8_t event = GPIO_INTR_NEGEDGE;

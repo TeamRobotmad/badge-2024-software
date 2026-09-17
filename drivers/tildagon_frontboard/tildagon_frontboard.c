@@ -48,7 +48,7 @@ void tildagon_frontboard_init( uint16_t board_id )
     aw9523b_pin_set_direction( &ext_pin[3], reset, false );
     aw9523b_pin_set_mode( &ext_pin[3], reset, AW9523B_PIN_MODE_GPIO );
     aw9523b_pin_set_output( &ext_pin[3], reset, true );
-
+    
     int compass_job_handle = qmc6309_init();
     if ( compass_job_handle >= 0 )
     {

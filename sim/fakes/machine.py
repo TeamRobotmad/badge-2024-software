@@ -31,6 +31,14 @@ class Pin:
             return self.value()
         return self.value(value)
 
+    def toggle(self):
+        return self.value(not self.value())
+
+    def __call__(self, value=None):
+        if value is None:
+            return self.value()
+        return self.value(value)
+
 class ADC:
     ATTN_11DB = None
 
