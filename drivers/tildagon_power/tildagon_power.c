@@ -11,8 +11,9 @@
 #include <string.h>
 #include "tildagon_power.h"
 #include "mp_power_event.h"
+#include "tildagon_frontboard.h"
 
-#define PD_VENDOR_ID 0xD016
+#define PD_VENDOR_ID MICROPY_HW_USB_VID
 
 typedef enum 
 {
@@ -88,10 +89,10 @@ static bool lanyard_mode = false;
  */
 void tildagon_power_fast_task(void *param __attribute__((__unused__)))
 {
-    event_queue = xQueueCreate( 10, sizeof(event_t) );     
-    usb_in.fusb.mux_port = tildagon_get_mux_obj( 7 );
-    usb_out.fusb.mux_port = tildagon_get_mux_obj( 0 );
-    pmic.mux_port = tildagon_get_mux_obj( 7 );
+    event_queue = xQueueCreate( 10, sizeof(event_t) );
+    usb_in.fusb.mux_port = tildagon_get_mux_obj( TILDAGON_SYS_I2C_PORT );
+    usb_out.fusb.mux_port = tildagon_get_mux_obj( TILDAGON_TOP_I2C_PORT );
+    pmic.mux_port = tildagon_get_mux_obj( TILDAGON_SYS_I2C_PORT );
     usb_out.pd.power_role = 1;
     usb_out.pd.data_role = 1;
     usb_out.pd.extra = &host_pd_extras;
@@ -645,6 +646,20 @@ void generate_events( void )
                 {
                     usb_out.pd.msg_id++;
                 }
+            }
+        }
+        /* if we've reached here it could be another interrupt came in for the 2026 touch or buttons */
+        if ( ( gpio_get_level( GPIO_NUM_10 ) == 0 ) && ( ext_pin[3].mux != NULL ) && ( ( board_identity & 0xFF00 ) == 0x2600 ) )
+        {
+            /* first check it's not another interrupt */
+            tildagon_pins_generate_isr();
+            if ( !aw9523b_pin_get_input(&ext_pin[1], iox_int ) )
+            {
+                aw9523b_irq_handler( &ext_pin[3] );
+            }
+            if ( !aw9523b_pin_get_input( &ext_pin[2], ls1 ) )
+            {
+                cy8cmbrx_cb( NULL, ls1, GPIO_INTR_NEGEDGE ); 
             }
         }
     }
