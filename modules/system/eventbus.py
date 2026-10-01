@@ -4,6 +4,7 @@ from async_queue import Queue as AsyncQueue
 from perf_timer import PerfTimer
 from system.scheduler.events import RequestStopAppEvent
 from system.notification.events import ShowNotificationEvent
+from system import gc_alloc_probe
 
 import sys
 
@@ -99,6 +100,7 @@ class _EventBus:
             # new handlers to be registered. We don't make any guarantee if these handlers
             # will be invoked or not for the event that triggered their registration, but
             # we must avoid RuntimeError due to dictionary edits.
+            sync_probe = gc_alloc_probe.begin(gc_alloc_probe.EVENT_SYNC)
             with PerfTimer("Synchronous event handlers"):
                 for app in tuple(self.handlers.keys()):
                     try:
@@ -118,7 +120,10 @@ class _EventBus:
                             )
                         )
 
+            gc_alloc_probe.end(gc_alloc_probe.EVENT_SYNC, sync_probe)
+
             async_tasks = {}
+            async_probe = gc_alloc_probe.begin(gc_alloc_probe.EVENT_ASYNC)
             with PerfTimer("Asynchronous event handlers"):
                 for app in tuple(self.async_handlers.keys()):
                     if getattr(app, "_focused", False) or not requires_focus:
@@ -132,6 +137,7 @@ class _EventBus:
                                     async_tasks[app].append(
                                         asyncio.create_task(handler(event))
                                     )
+            gc_alloc_probe.end(gc_alloc_probe.EVENT_ASYNC, async_probe)
 
             for app_tasks in async_tasks.items():
                 (app, tasks) = app_tasks

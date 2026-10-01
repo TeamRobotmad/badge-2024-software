@@ -12,6 +12,7 @@ from tildagonos import tildagonos, led_colours
 # hexpansion style, but this list is indexed from 0-5,
 # Python style.
 active_back_leds = [False] * 6
+_BACK_LED_OFF = (0, 0, 0)
 
 
 class BackLEDManager(App):
@@ -20,6 +21,11 @@ class BackLEDManager(App):
         # a notification should take this lock.
         self.lock = asyncio.Lock()
         self.enabled = True
+        self._leds = tildagonos.leds
+        self._read_led_into = getattr(self._leds, "get_into", None)
+        self._mirror_buffer = [0, 0, 0]
+        self._last_back_led_rgb = [[-1, -1, -1] for _ in range(6)]
+        self._back_leds_valid = False
         tildagonos.set_led_power(True)
         eventbus.on_async(HexpansionInsertionEvent, self.handle_insertion, self)
         eventbus.on_async(HexpansionRemovalEvent, self.handle_removal, self)
@@ -32,9 +38,11 @@ class BackLEDManager(App):
 
     async def handle_enable(self, event):
         self.enabled = True
+        self._back_leds_valid = False
 
     async def handle_disable(self, event):
         self.enabled = False
+        self._back_leds_valid = False
 
     async def handle_positive(self, event):
         if not self.enabled:
@@ -51,6 +59,7 @@ class BackLEDManager(App):
                 tildagonos.leds.write()
                 await asyncio.sleep(0.05)
         finally:
+            self._back_leds_valid = False
             self.lock.release()
 
     async def handle_negative(self, event):
@@ -68,6 +77,7 @@ class BackLEDManager(App):
                 tildagonos.leds.write()
                 await asyncio.sleep(0.05)
         finally:
+            self._back_leds_valid = False
             self.lock.release()
 
     async def handle_insertion(self, event):
@@ -83,12 +93,41 @@ class BackLEDManager(App):
         if self.lock.locked():  # e.g. if emotes are being displayed
             return
 
-        for i in range(0, 6):
+        leds = self._leds
+        read_led_into = self._read_led_into
+        mirror_pattern = settings.get("pattern_mirror_hexpansions", False)
+        changed = False
+        i = 0
+        while i < 6:
             if active_back_leds[i]:
-                if settings.get("pattern_mirror_hexpansions", False):
-                    tildagonos.leds[13 + i] = tildagonos.leds[1 + (i * 2)]
+                if mirror_pattern:
+                    if read_led_into is None:
+                        colour = leds[1 + (i * 2)]
+                    else:
+                        read_led_into(1 + (i * 2), self._mirror_buffer)
+                        colour = self._mirror_buffer
                 else:
-                    tildagonos.leds[13 + i] = led_colours[i]
+                    colour = led_colours[i]
             else:
-                tildagonos.leds[13 + i] = (0, 0, 0)
-        tildagonos.leds.write()
+                colour = _BACK_LED_OFF
+
+            red = colour[0]
+            green = colour[1]
+            blue = colour[2]
+            previous = self._last_back_led_rgb[i]
+            if (
+                not self._back_leds_valid
+                or red != previous[0]
+                or green != previous[1]
+                or blue != previous[2]
+            ):
+                leds[13 + i] = colour
+                previous[0] = red
+                previous[1] = green
+                previous[2] = blue
+                changed = True
+            i += 1
+
+        self._back_leds_valid = True
+        if changed:
+            leds.write()

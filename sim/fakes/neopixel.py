@@ -18,6 +18,12 @@ class NeoPixel:
     def __setitem__(self, item, value):
         leds.set_rgb(item, *value)
 
+    def set_many(self, start, values, count, values_start=0):
+        pixel = 0
+        while pixel < count:
+            self[start + pixel] = values[values_start + pixel]
+            pixel += 1
+
     def __getitem__(self, item):
         return leds.get_rgb(item)
 
@@ -31,6 +37,12 @@ class MergedNeoPixel:
         leds = self.indices[i]
         for led in leds:
             self.string[led] = v
+
+    def set_many(self, start, values, count, values_start=0):
+        pixel = 0
+        while pixel < count:
+            self[start + pixel] = values[values_start + pixel]
+            pixel += 1
 
     def __getitem__(self, i):
         leds = self.indices[i]
@@ -73,6 +85,12 @@ class ComposedNeoPixel:
             del self.offsets[bad_idx]
             del self.lengths[bad_idx]
 
+    def set_many(self, start, values, count, values_start=0):
+        pixel = 0
+        while pixel < count:
+            self[start + pixel] = values[values_start + pixel]
+            pixel += 1
+
     def __getitem__(self, i):
         for string, offset, length in zip(self.strings, self.offsets, self.lengths):
             index = i - offset
@@ -104,6 +122,12 @@ class CorrectedNeoPixel:
         if alteration is not None:
             v = alteration(v)
         self.string[i] = v
+
+    def set_many(self, start, values, count, values_start=0):
+        pixel = 0
+        while pixel < count:
+            self[start + pixel] = values[values_start + pixel]
+            pixel += 1
 
     def __getitem__(self, i):
         return self.string[i]

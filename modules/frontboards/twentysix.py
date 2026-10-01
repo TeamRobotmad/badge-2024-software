@@ -1,4 +1,4 @@
-import asyncio
+from async_helpers import sleep_ms
 
 import display
 from events.input import Button, BUTTON_TYPES, ButtonDownEvent, ButtonUpEvent
@@ -315,9 +315,10 @@ class TwentyTwentySix(FrontBoard):
                     frontboard2026.IRQ_FALLING,
                 )
 
+        boop_pin = machine.Pin(0, mode=machine.Pin.IN)
         while True:
             now = time.ticks_ms()
-            booped = not machine.Pin(0, mode=machine.Pin.IN).value()
+            booped = not boop_pin.value()
             if booped:
                 for i, gpio in enumerate(
                     map(lambda i: self.BUTTON_PINS[BUTTONS[i]], "ABCDEF")
@@ -332,8 +333,10 @@ class TwentyTwentySix(FrontBoard):
                         await eventbus.emit_async(HexpansionRemovalEvent(port=i + 1))
             else:
                 if sim:
-                    for i, key in enumerate(TwentyTwentySix.button_states.keys()):
-                        button_down = not _sim.buttons.state()[i]
+                    button_inputs = _sim.buttons.state()
+                    index = 0
+                    for key in TwentyTwentySix.button_states:
+                        button_down = not button_inputs[index]
                         if button_down and not TwentyTwentySix.button_states[key][0]:
                             await eventbus.emit_async(
                                 ButtonUpEvent(button=BUTTONS[key])
@@ -343,8 +346,9 @@ class TwentyTwentySix(FrontBoard):
                                 ButtonDownEvent(button=BUTTONS[key])
                             )
                         TwentyTwentySix.button_states[key][0] = button_down
+                        index += 1
                 else:
-                    for key in TwentyTwentySix.pin_assignment.keys():
+                    for key in TwentyTwentySix.pin_assignment:
                         if TwentyTwentySix.button_states[key][0]:
                             if (
                                 time.ticks_diff(
@@ -357,7 +361,7 @@ class TwentyTwentySix(FrontBoard):
                                 )
                                 TwentyTwentySix.button_states[key][1] = now
 
-                    for key in TwentyTwentySix.joystick_states.keys():
+                    for key in TwentyTwentySix.joystick_states:
                         if TwentyTwentySix.joystick_states[key][0]:
                             if (
                                 time.ticks_diff(
@@ -370,4 +374,4 @@ class TwentyTwentySix(FrontBoard):
                                 )
                                 TwentyTwentySix.joystick_states[key][1] = now
 
-            await asyncio.sleep(0.1)
+            await sleep_ms(100)

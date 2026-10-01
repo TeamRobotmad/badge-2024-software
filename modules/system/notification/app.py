@@ -18,14 +18,30 @@ class NotificationService(app.App):
         self.notifications[event.port].open()
 
     def update(self, delta):
-        for notification in self.notifications:
+        notifications = self.notifications
+        has_active_notification = False
+        index = 0
+        while index < len(notifications):
+            notification = notifications[index]
+            if not notification._open and notification._animation_state == 0:
+                index += 1
+                continue
             try:
                 notification.update(delta)
             except Exception as e:
                 print(e)
+                index += 1
                 continue
-        return any(notification._open for notification in self.notifications)
+            if notification._open or notification._animation_state != 0:
+                has_active_notification = True
+            index += 1
+        return has_active_notification
 
     def draw(self, ctx):
-        for notification in self.notifications:
-            notification.draw(ctx)
+        notifications = self.notifications
+        index = 0
+        while index < len(notifications):
+            notification = notifications[index]
+            if notification._animation_state >= 0.01:
+                notification.draw(ctx)
+            index += 1

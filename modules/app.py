@@ -1,11 +1,12 @@
-import asyncio
 import time
+from async_helpers import sleep_ms
 
 from system.eventbus import eventbus
 from system.scheduler.events import RequestForegroundPopEvent
 
 from system.scheduler.events import RequestStopAppEvent
 from system.patterndisplay.events import PatternEnable
+from system import gc_alloc_probe
 
 
 class App:
@@ -21,10 +22,37 @@ class App:
         while True:
             cur_time = time.ticks_ms()
             delta_ticks = time.ticks_diff(cur_time, last_time)
-            if self.update(delta_ticks) is not False:
+            probe = None
+            if gc_alloc_probe._enabled:
+                site = gc_alloc_probe.APP_UPDATE
+                gc_alloc_probe._calls[site] += 1
+                gc_alloc_probe._remaining[site] -= 1
+                if gc_alloc_probe._remaining[site] <= 0:
+                    gc_alloc_probe._remaining[site] = gc_alloc_probe._SAMPLE_EVERY[site]
+                    probe_collections = (
+                        gc_alloc_probe._collection_count()
+                        if gc_alloc_probe._collection_count is not None
+                        else 0
+                    )
+                    probe = gc_alloc_probe._mem_alloc()
+            update_result = self.update(delta_ticks)
+            if probe is not None:
+                collections_after = (
+                    gc_alloc_probe._collection_count()
+                    if gc_alloc_probe._collection_count is not None
+                    else 0
+                )
+                gc_alloc_probe.record(
+                    gc_alloc_probe.APP_UPDATE,
+                    probe,
+                    gc_alloc_probe._mem_alloc(),
+                    probe_collections,
+                    collections_after,
+                )
+            if update_result is not False:
                 await render_update()
             else:
-                await asyncio.sleep(0.05)
+                await sleep_ms(50)
             last_time = cur_time
 
     def update(self, delta: float) -> bool:
@@ -45,8 +73,34 @@ class App:
         while True:
             cur_time = time.ticks_ms()
             delta_ticks = time.ticks_diff(cur_time, last_time)
+            probe = None
+            if gc_alloc_probe._enabled:
+                site = gc_alloc_probe.APP_BACKGROUND
+                gc_alloc_probe._calls[site] += 1
+                gc_alloc_probe._remaining[site] -= 1
+                if gc_alloc_probe._remaining[site] <= 0:
+                    gc_alloc_probe._remaining[site] = gc_alloc_probe._SAMPLE_EVERY[site]
+                    probe_collections = (
+                        gc_alloc_probe._collection_count()
+                        if gc_alloc_probe._collection_count is not None
+                        else 0
+                    )
+                    probe = gc_alloc_probe._mem_alloc()
             self.background_update(delta_ticks)
-            await asyncio.sleep(0.05)
+            if probe is not None:
+                collections_after = (
+                    gc_alloc_probe._collection_count()
+                    if gc_alloc_probe._collection_count is not None
+                    else 0
+                )
+                gc_alloc_probe.record(
+                    gc_alloc_probe.APP_BACKGROUND,
+                    probe,
+                    gc_alloc_probe._mem_alloc(),
+                    probe_collections,
+                    collections_after,
+                )
+            await sleep_ms(50)
             last_time = cur_time
 
     def background_update(self, delta):

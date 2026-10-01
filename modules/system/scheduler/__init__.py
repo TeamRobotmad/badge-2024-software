@@ -5,7 +5,7 @@ import time
 
 from events.emote import EmoteNegativeEvent
 from system.a11y.events import ReplaceAccessibilityHandlerEvent
-from perf_timer import PerfTimer
+from perf_timer import DEBUG_PERF, PerfTimer
 from system.a11y import printer
 from system.eventbus import eventbus
 from system.scheduler.events import (
@@ -19,6 +19,55 @@ from system.capabilities.utils import (
     get_manifest_from_compact_app_format,
 )
 from system.notification.events import ShowNotificationEvent
+from system import gc_alloc_probe
+
+_RENDER_PERF_TIMER = PerfTimer("render")
+_APP_RENDER_PERF_TIMER = PerfTimer("")
+
+
+def _draw_app(ctx, app):
+    if DEBUG_PERF:
+        _APP_RENDER_PERF_TIMER.name = f"rendering {app}"
+
+    with _APP_RENDER_PERF_TIMER:
+        ctx.save()
+        probe = None
+        if gc_alloc_probe._enabled:
+            site = gc_alloc_probe.APP_DRAW
+            gc_alloc_probe._calls[site] += 1
+            gc_alloc_probe._remaining[site] -= 1
+            if gc_alloc_probe._remaining[site] <= 0:
+                gc_alloc_probe._remaining[site] = gc_alloc_probe._SAMPLE_EVERY[site]
+                probe_collections = (
+                    gc_alloc_probe._collection_count()
+                    if gc_alloc_probe._collection_count is not None
+                    else 0
+                )
+                probe = gc_alloc_probe._mem_alloc()
+        try:
+            app.draw(ctx)
+        except Exception as e:
+            eventbus.emit(RequestStopAppEvent(app=app))
+            sys.print_exception(e, sys.stderr)
+            eventbus.emit(
+                ShowNotificationEvent(message=f"{app.__class__.__name__} has crashed")
+            )
+            eventbus.emit(EmoteNegativeEvent())
+        finally:
+            if probe is not None:
+                collections_after = (
+                    gc_alloc_probe._collection_count()
+                    if gc_alloc_probe._collection_count is not None
+                    else 0
+                )
+                gc_alloc_probe.record(
+                    gc_alloc_probe.APP_DRAW,
+                    probe,
+                    gc_alloc_probe._mem_alloc(),
+                    probe_collections,
+                    collections_after,
+                )
+        ctx.restore()
 
 
 class _Scheduler:
@@ -248,24 +297,16 @@ class _Scheduler:
             await self.render_needed.wait()
             self.render_needed.clear()
 
-            with PerfTimer("render"):
+            with _RENDER_PERF_TIMER:
                 ctx = display.get_ctx()
                 ctx.a11y = self.a11y_handler
-                for app in self.foreground_stack[-1:] + self.on_top_stack:
-                    with PerfTimer(f"rendering {app}"):
-                        ctx.save()
-                        try:
-                            app.draw(ctx)
-                        except Exception as e:
-                            eventbus.emit(RequestStopAppEvent(app=app))
-                            sys.print_exception(e, sys.stderr)
-                            eventbus.emit(
-                                ShowNotificationEvent(
-                                    message=f"{app.__class__.__name__} has crashed"
-                                )
-                            )
-                            eventbus.emit(EmoteNegativeEvent())
-                        ctx.restore()
+                if self.foreground_stack:
+                    _draw_app(ctx, self.foreground_stack[-1])
+
+                index = 0
+                while index < len(self.on_top_stack):
+                    _draw_app(ctx, self.on_top_stack[index])
+                    index += 1
                 display.end_frame(ctx)
                 if ctx.a11y:
                     try:
