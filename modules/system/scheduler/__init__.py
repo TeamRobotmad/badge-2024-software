@@ -2,6 +2,7 @@ import asyncio
 import display
 import sys
 import time
+from async_helpers import sleep_ms
 
 from events.emote import EmoteNegativeEvent
 from system.a11y.events import ReplaceAccessibilityHandlerEvent
@@ -283,13 +284,13 @@ class _Scheduler:
         async def mark_update_finished():
             # Unblock renderer
             self.render_needed.set()
-            await asyncio.sleep(0.05)
+            await sleep_ms(50)
 
             # If we're no longer foregounded, wait until it is before returning
             did_lose_focus = False
             while not self.app_is_foregrounded(app):
                 did_lose_focus = True
-                await asyncio.sleep(0.250)
+                await sleep_ms(250)
 
             # Return control to the update task
             return did_lose_focus
@@ -348,7 +349,7 @@ class _Scheduler:
                     except Exception as e:
                         print(e)
                         pass
-            await asyncio.sleep(0)
+            await sleep_ms(0)
 
     async def _handle_new_a11y_handler(self, event):
         self.a11y_handler = event.klass()
