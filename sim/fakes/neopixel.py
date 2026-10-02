@@ -142,13 +142,31 @@ class CorrectedNeoPixel:
 
 class DimCorrection:
     def __init__(self, amount):
+        self._amount = None
+        self._amount_percent = None
         self.amount = amount
+
+    @property
+    def amount(self):
+        return self._amount
+
+    @amount.setter
+    def amount(self, amount):
+        if amount == self._amount:
+            return
+        self._amount = amount
+        amount_percent = int(amount * 100 + 0.5)
+        if amount_percent < 0:
+            amount_percent = 0
+        elif amount_percent > 100:
+            amount_percent = 100
+        self._amount_percent = amount_percent
 
     def __call__(self, v):
         new_val = []
+        amount_percent = self._amount_percent
         for channel in v:
-            channel *= self.amount
-            channel = int(channel)
+            channel = channel * amount_percent // 100
             if channel > 255:
                 channel = 255
             if channel < 0:
