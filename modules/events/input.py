@@ -116,10 +116,11 @@ class Buttons:
         return self.buttons.__iter__()
 
     def get(self, button, default=None):
-        matching_values = [
-            value for (b, value) in self.buttons.items() if b == button or button in b
-        ]
-        return any(matching_values)
+        for candidate in self.buttons:
+            if candidate == button or button in candidate:
+                if self.buttons[candidate]:
+                    return True
+        return False
 
     def pressed(self, button):
         # Latched button read, only returns True once until it is read again and off
