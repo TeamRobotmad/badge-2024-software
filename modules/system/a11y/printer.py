@@ -1,6 +1,7 @@
 class PrintA11y:
     def __init__(self):
         self.alts = []
+        self._cached_alt = None
         self.collected = []
         self.last_strings = []
         self._last_strings_are_alts = False
@@ -10,20 +11,29 @@ class PrintA11y:
 
     def add_alt(self, app, text, always=False, transient=False):
         if not self.inhibit:
-            self.alts.append((text, always, transient))
+            cached_alt = self._cached_alt
+            if (
+                cached_alt is None
+                or cached_alt[0] != text
+                or cached_alt[1] != always
+                or cached_alt[2] != transient
+            ):
+                cached_alt = (text, always, transient)
+                self._cached_alt = cached_alt
+            self.alts.append(cached_alt)
 
     def collect_text(self, text):
         if not self.inhibit:
             self.collected.append(text)
 
     def reset(self):
-        self.collected = []
-        self.alts = []
+        self.collected.clear()
+        self.alts.clear()
 
     def get_all_strings(self):
         if self.alts:
             return [s for (s, a, t) in self.alts]
-        return self.collected
+        return self.collected[:]
 
     def get_deduped_strings(self):
         use_alts = bool(self.alts)
