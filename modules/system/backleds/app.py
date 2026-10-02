@@ -93,41 +93,40 @@ class BackLEDManager(App):
         if self.lock.locked():  # e.g. if emotes are being displayed
             return
 
-        leds = self._leds
-        read_led_into = self._read_led_into
         mirror_pattern = settings.get("pattern_mirror_hexpansions", False)
         changed = False
         i = 0
         while i < 6:
-            if active_back_leds[i]:
-                if mirror_pattern:
-                    if read_led_into is None:
-                        colour = leds[1 + (i * 2)]
-                    else:
-                        read_led_into(1 + (i * 2), self._mirror_buffer)
-                        colour = self._mirror_buffer
-                else:
-                    colour = led_colours[i]
-            else:
-                colour = _BACK_LED_OFF
-
-            red = colour[0]
-            green = colour[1]
-            blue = colour[2]
-            previous = self._last_back_led_rgb[i]
-            if (
-                not self._back_leds_valid
-                or red != previous[0]
-                or green != previous[1]
-                or blue != previous[2]
-            ):
-                leds[13 + i] = colour
-                previous[0] = red
-                previous[1] = green
-                previous[2] = blue
+            if self._update_back_led(i, mirror_pattern):
                 changed = True
             i += 1
 
         self._back_leds_valid = True
         if changed:
-            leds.write()
+            self._leds.write()
+
+    def _update_back_led(self, index, mirror_pattern):
+        colour = self._back_led_colour(index, mirror_pattern)
+        previous = self._last_back_led_rgb[index]
+        if (
+            not self._back_leds_valid
+            or colour[0] != previous[0]
+            or colour[1] != previous[1]
+            or colour[2] != previous[2]
+        ):
+            self._leds[13 + index] = colour
+            previous[0] = colour[0]
+            previous[1] = colour[1]
+            previous[2] = colour[2]
+            return True
+        return False
+
+    def _back_led_colour(self, index, mirror_pattern):
+        if not active_back_leds[index]:
+            return _BACK_LED_OFF
+        if not mirror_pattern:
+            return led_colours[index]
+        if self._read_led_into is None:
+            return self._leds[1 + (index * 2)]
+        self._read_led_into(1 + (index * 2), self._mirror_buffer)
+        return self._mirror_buffer

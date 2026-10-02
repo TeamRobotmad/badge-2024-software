@@ -23,6 +23,7 @@ from system import gc_alloc_probe
 
 _RENDER_PERF_TIMER = PerfTimer("render")
 _APP_RENDER_PERF_TIMER = PerfTimer("")
+_APP_DRAW_PROBE = [0, 0]
 
 
 def _draw_app(ctx, app):
@@ -31,43 +32,75 @@ def _draw_app(ctx, app):
 
     with _APP_RENDER_PERF_TIMER:
         ctx.save()
-        probe = None
-        if gc_alloc_probe._enabled:
-            site = gc_alloc_probe.APP_DRAW
-            gc_alloc_probe._calls[site] += 1
-            gc_alloc_probe._remaining[site] -= 1
-            if gc_alloc_probe._remaining[site] <= 0:
-                gc_alloc_probe._remaining[site] = gc_alloc_probe._SAMPLE_EVERY[site]
-                probe_collections = (
-                    gc_alloc_probe._collection_count()
-                    if gc_alloc_probe._collection_count is not None
-                    else 0
-                )
-                probe = gc_alloc_probe._mem_alloc()
-        try:
-            app.draw(ctx)
-        except Exception as e:
-            eventbus.emit(RequestStopAppEvent(app=app))
-            sys.print_exception(e, sys.stderr)
-            eventbus.emit(
-                ShowNotificationEvent(message=f"{app.__class__.__name__} has crashed")
-            )
-            eventbus.emit(EmoteNegativeEvent())
-        finally:
-            if probe is not None:
-                collections_after = (
-                    gc_alloc_probe._collection_count()
-                    if gc_alloc_probe._collection_count is not None
-                    else 0
-                )
-                gc_alloc_probe.record(
-                    gc_alloc_probe.APP_DRAW,
-                    probe,
-                    gc_alloc_probe._mem_alloc(),
-                    probe_collections,
-                    collections_after,
-                )
+        _draw_app_with_probe(ctx, app)
         ctx.restore()
+
+
+def _draw_app_with_probe(ctx, app):
+    if _begin_app_draw_probe():
+        _draw_sampled_app(ctx, app)
+    else:
+        _draw_app_safely(ctx, app)
+
+
+def _begin_app_draw_probe():
+    if not gc_alloc_probe._enabled:
+        return False
+    site = gc_alloc_probe.APP_DRAW
+    gc_alloc_probe._calls[site] += 1
+    gc_alloc_probe._remaining[site] -= 1
+    if gc_alloc_probe._remaining[site] > 0:
+        return False
+    gc_alloc_probe._remaining[site] = gc_alloc_probe._SAMPLE_EVERY[site]
+    _APP_DRAW_PROBE[1] = (
+        gc_alloc_probe._collection_count()
+        if gc_alloc_probe._collection_count is not None
+        else 0
+    )
+    _APP_DRAW_PROBE[0] = gc_alloc_probe._mem_alloc()
+    return True
+
+
+def _draw_sampled_app(ctx, app):
+    try:
+        _draw_app_safely(ctx, app)
+    finally:
+        _finish_app_draw_probe()
+
+
+def _finish_app_draw_probe():
+    collections_after = (
+        gc_alloc_probe._collection_count()
+        if gc_alloc_probe._collection_count is not None
+        else 0
+    )
+    gc_alloc_probe.record(
+        gc_alloc_probe.APP_DRAW,
+        _APP_DRAW_PROBE[0],
+        gc_alloc_probe._mem_alloc(),
+        _APP_DRAW_PROBE[1],
+        collections_after,
+    )
+
+
+def _draw_app_safely(ctx, app):
+    try:
+        app.draw(ctx)
+    except Exception:
+        _handle_app_draw_error(app)
+
+
+def _handle_app_draw_error(app):
+    eventbus.emit(RequestStopAppEvent(app=app))
+    print("App draw failed")
+    _notify_app_draw_crash(app)
+    eventbus.emit(EmoteNegativeEvent())
+
+
+def _notify_app_draw_crash(app):
+    eventbus.emit(
+        ShowNotificationEvent(message=f"{app.__class__.__name__} has crashed")
+    )
 
 
 class _Scheduler:
@@ -310,7 +343,7 @@ class _Scheduler:
                 display.end_frame(ctx)
                 if ctx.a11y:
                     try:
-                        await ctx.a11y.finalise_frame()
+                        ctx.a11y.finalise_frame()
                         ctx.a11y.reset()
                     except Exception as e:
                         print(e)

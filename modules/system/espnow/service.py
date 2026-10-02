@@ -20,6 +20,14 @@ EspNowHandler = Callable[[EspNowReceiveEvent], Any]
 EspNowPredicate = Callable[[EspNowReceiveEvent], bool]
 
 
+def _try_configure_power_management(sta, pm):
+    try:
+        sta.config(pm=pm)
+    except OSError:
+        return False
+    return True
+
+
 class EspNowService(App):
     """Single owner of the ESP-NOW radio.
 
@@ -63,33 +71,46 @@ class EspNowService(App):
 
     def _has_listeners(self) -> bool:
         # Check the eventbus to see if we have anyone listening for esp-now messages
-        for registry in (eventbus.async_handlers, eventbus.handlers):
-            for app_handlers in registry.values():
-                if app_handlers.get(EspNowReceiveEvent):
-                    return True
+        return self._registry_has_listeners(
+            eventbus.async_handlers
+        ) or self._registry_has_listeners(eventbus.handlers)
+
+    def _registry_has_listeners(self, registry) -> bool:
+        for app_handlers in registry.values():
+            if app_handlers.get(EspNowReceiveEvent):
+                return True
         return False
 
     def _apply_power_management(self) -> None:
+        sta = network.WLAN(network.STA_IF)
+        if sta.active():
+            self._sync_power_management(sta)
+
+    def _sync_power_management(self, sta) -> None:
         # WiFi's default PM_PERFORMANCE sleeps the radio and drops esp-now messages.
         # Use PM_NONE while anything is listening, restore power-saving when nothing is.
-        sta = network.WLAN(network.STA_IF)
-        if not sta.active():
-            return
         awake = self._has_listeners()
         pm = sta.PM_NONE if awake else sta.PM_PERFORMANCE
+        if self._configure_power_management(sta, pm):
+            self._update_radio_awake(awake)
 
-        # After a hard reset, we need to wait for the wifi driver to initialize
-        # before setting power management
-        for attempt in range(3):
-            try:
-                sta.config(pm=pm)
-                break
-            except OSError as e:
-                if attempt == 2:
-                    print("ESP-NOW: deferring power management (%s)" % e)
-                    return
-                time.sleep_ms(50)
+    def _configure_power_management(self, sta, pm) -> bool:
+        # After a hard reset, wait for the wifi driver to initialize before setting power management.
+        attempt = 0
+        while attempt < 3:
+            if _try_configure_power_management(sta, pm):
+                return True
+            if attempt == 2:
+                self._log_power_management_error()
+                return False
+            time.sleep_ms(50)
+            attempt += 1
+        return False
 
+    def _log_power_management_error(self):
+        print("ESP-NOW: deferring power management")
+
+    def _update_radio_awake(self, awake):
         if awake != self._radio_awake:
             if awake:
                 print("ESP-NOW: listener(s) present, keeping radio awake (PM_NONE)")

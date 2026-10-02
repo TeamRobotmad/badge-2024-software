@@ -49,22 +49,26 @@ class _Background:
             self.runner.update(delta)
 
     def draw(self, ctx):
-        if self.runner:
-            ctx.save()
-            try:
-                self.runner.draw(ctx)
-            except Exception as e:
-                print(f"Error creating background: {e}")
-                eventbus.emit(
-                    ShowNotificationEvent(
-                        message=f"Background {self.selection[0]} has crashed"
-                    )
-                )
-                eventbus.emit(EmoteNegativeEvent())
-                self.runner = None
-            ctx.restore()
-        else:
+        if not self.runner:
             clear_background(ctx)
+            return
+        ctx.save()
+        self._draw_runner(ctx)
+        ctx.restore()
+
+    def _draw_runner(self, ctx):
+        try:
+            self.runner.draw(ctx)
+        except Exception:
+            self._handle_draw_error()
+
+    def _handle_draw_error(self):
+        print("Error creating background")
+        eventbus.emit(
+            ShowNotificationEvent(message=f"Background {self.selection[0]} has crashed")
+        )
+        eventbus.emit(EmoteNegativeEvent())
+        self.runner = None
 
 
 Background = _Background()
