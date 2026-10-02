@@ -86,6 +86,8 @@ def set_color(ctx, color):
 
 
 def _try_color_function(ctx, color):
+    if not callable(color):
+        return False
     try:
         color(ctx)
         return True
@@ -102,7 +104,12 @@ def _set_rgb_color(ctx, color):
 
 def _try_rgb_color(ctx, color):
     try:
-        ctx.rgb(*color)
+        if isinstance(color, tuple) or isinstance(color, list):
+            if len(color) != 3:
+                return False
+            ctx.rgb(color[0], color[1], color[2])
+        else:
+            ctx.rgb(*color)
         return True
     except Exception:
         return False
