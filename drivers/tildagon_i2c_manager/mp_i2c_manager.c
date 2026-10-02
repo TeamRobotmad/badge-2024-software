@@ -3,6 +3,7 @@
 #include "py/builtin.h"
 #include "py/runtime.h"
 #include "py/obj.h"
+#include "py/smallint.h"
 #include <string.h>
 
 typedef struct _i2c_mgr_job_obj_t {
@@ -98,7 +99,8 @@ static mp_obj_t i2c_mgr_job_read_into( mp_obj_t self_in, mp_obj_t buf_in )
     {
         return mp_const_none;
     }
-    return mp_obj_new_int_from_ull( (unsigned long long)seq );
+    mp_uint_t small_seq = (mp_uint_t)seq & MP_SMALL_INT_POSITIVE_MASK;
+    return mp_obj_new_int_from_uint( small_seq );
 }
 static MP_DEFINE_CONST_FUN_OBJ_2( i2c_mgr_job_read_into_obj, i2c_mgr_job_read_into );
 
