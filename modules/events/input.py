@@ -17,7 +17,7 @@ class Button:
         self._all_parents = None
 
     def __hash__(self):
-        return hash((self.name, self.group))
+        return hash(self.name) ^ hash(self.group)
 
     def _inner_repr(self):
         parents_clause = "".join(
