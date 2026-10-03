@@ -20,11 +20,9 @@ from system.capabilities.utils import (
     get_manifest_from_compact_app_format,
 )
 from system.notification.events import ShowNotificationEvent
-from system import gc_alloc_probe
 
 _RENDER_PERF_TIMER = PerfTimer("render")
 _APP_RENDER_PERF_TIMER = PerfTimer("")
-_APP_DRAW_PROBE = [0, 0]
 
 
 def _draw_app(ctx, app):
@@ -33,55 +31,8 @@ def _draw_app(ctx, app):
 
     with _APP_RENDER_PERF_TIMER:
         ctx.save()
-        _draw_app_with_probe(ctx, app)
+        _draw_app_safely(ctx, app)
         ctx.restore()
-
-
-def _draw_app_with_probe(ctx, app):
-    if _begin_app_draw_probe():
-        _draw_sampled_app(ctx, app)
-    else:
-        _draw_app_safely(ctx, app)
-
-
-def _begin_app_draw_probe():
-    if not gc_alloc_probe._enabled:
-        return False
-    site = gc_alloc_probe.APP_DRAW
-    gc_alloc_probe._calls[site] += 1
-    gc_alloc_probe._remaining[site] -= 1
-    if gc_alloc_probe._remaining[site] > 0:
-        return False
-    gc_alloc_probe._remaining[site] = gc_alloc_probe._SAMPLE_EVERY[site]
-    _APP_DRAW_PROBE[1] = (
-        gc_alloc_probe._collection_count()
-        if gc_alloc_probe._collection_count is not None
-        else 0
-    )
-    _APP_DRAW_PROBE[0] = gc_alloc_probe._mem_alloc()
-    return True
-
-
-def _draw_sampled_app(ctx, app):
-    try:
-        _draw_app_safely(ctx, app)
-    finally:
-        _finish_app_draw_probe()
-
-
-def _finish_app_draw_probe():
-    collections_after = (
-        gc_alloc_probe._collection_count()
-        if gc_alloc_probe._collection_count is not None
-        else 0
-    )
-    gc_alloc_probe.record(
-        gc_alloc_probe.APP_DRAW,
-        _APP_DRAW_PROBE[0],
-        gc_alloc_probe._mem_alloc(),
-        _APP_DRAW_PROBE[1],
-        collections_after,
-    )
 
 
 def _draw_app_safely(ctx, app):
