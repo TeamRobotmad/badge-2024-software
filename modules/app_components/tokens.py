@@ -80,11 +80,23 @@ def clear_background(ctx):
 
 def set_color(ctx, color):
     color = ui_colors.get(color, colors.get(color, color))
-    try:
-        color(ctx)
-        return ctx
-    except Exception:
-        pass
+    if callable(color):
+        try:
+            color(ctx)
+            return ctx
+        except Exception:
+            pass
+
+    if isinstance(color, tuple) or isinstance(color, list):
+        if len(color) != 3:
+            ctx.rgb(0.5, 0.5, 0.5)
+            return ctx
+        try:
+            ctx.rgb(color[0], color[1], color[2])
+            return ctx
+        except Exception:
+            ctx.rgb(0.5, 0.5, 0.5)
+            return ctx
 
     try:
         ctx.rgb(*color)

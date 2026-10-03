@@ -44,6 +44,10 @@ class Menu:
         self.speed_ms = speed_ms
         self.item_font_size = item_font_size
         self.item_line_height = item_line_height
+        self._idle_next_item_y = (
+            focused_item_margin + item_line_height,
+            focused_item_margin + 2 * item_line_height,
+        )
         self.focused_item_font_size = focused_item_font_size
         self.focused_item_margin = focused_item_margin
         self.focused_item_font_size_arr = []
@@ -208,9 +212,17 @@ class Menu:
             # Next menu items
             for i in range(1, 3):
                 if (self.position + i) < num_menu_items:
+                    if self.is_animating == "none":
+                        y = self._idle_next_item_y[i - 1]
+                    else:
+                        y = (
+                            self.focused_item_margin
+                            + i * self.item_line_height
+                            + y_offset
+                        )
                     ctx.move_to(
                         0,
-                        self.focused_item_margin + i * self.item_line_height + y_offset,
+                        y,
                     ).text(self.menu_items[self.position + i])
 
     def update(self, delta):
