@@ -93,7 +93,7 @@ class PrintA11y:
             return self.last_strings[index][0]
         return self.last_strings[index]
 
-    def finalise_frame(self):
+    async def finalise_frame(self):
         text = self.get_deduped_strings()
         if text:
             print("[Screen reader] " + " ".join(text))

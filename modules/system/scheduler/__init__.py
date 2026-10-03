@@ -295,7 +295,7 @@ class _Scheduler:
                 display.end_frame(ctx)
                 if ctx.a11y:
                     try:
-                        ctx.a11y.finalise_frame()
+                        await ctx.a11y.finalise_frame()
                         ctx.a11y.reset()
                     except Exception as e:
                         print(e)
