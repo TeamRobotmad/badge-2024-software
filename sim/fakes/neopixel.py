@@ -1,6 +1,19 @@
 from _sim import _sim
 import leds
 
+
+def _get_into(string, index, result):
+    read_into = getattr(type(string), "get_into", None)
+    if read_into is not None:
+        return read_into(string, index, result)
+    colour = string[index]
+    channel = 0
+    while channel < len(result):
+        result[channel] = colour[channel]
+        channel += 1
+    return result
+
+
 class NeoPixel:
 
     def __init__(self, pin, n, bpp=3, timing=1):
@@ -27,6 +40,14 @@ class NeoPixel:
     def __getitem__(self, item):
         return leds.get_rgb(item)
 
+    def get_into(self, item, result):
+        colour = leds.get_rgb(item)
+        channel = 0
+        while channel < len(result):
+            result[channel] = colour[channel]
+            channel += 1
+        return result
+
 class MergedNeoPixel:
     def __init__(self, string, indices):
         self.string = string
@@ -49,6 +70,12 @@ class MergedNeoPixel:
         for led in leds:
             return self.string[led]
         raise KeyError("No such LED in this string")
+
+    def get_into(self, i, result):
+        leds = self.indices[i]
+        if len(leds) == 0:
+            raise KeyError("No such LED in this string")
+        return _get_into(self.string, leds[0], result)
 
     def fill(self, v):
         self.string.fill(v)
@@ -98,6 +125,13 @@ class ComposedNeoPixel:
                 return string[index]
         raise KeyError("No such LED in this string")
 
+    def get_into(self, i, result):
+        for string, offset, length in zip(self.strings, self.offsets, self.lengths):
+            index = i - offset
+            if index >= 0 and index < length:
+                return _get_into(string, index, result)
+        raise KeyError("No such LED in this string")
+
     def fill(self, v):
         for string in self.strings:
             string.fill(v)
@@ -131,6 +165,21 @@ class CorrectedNeoPixel:
 
     def __getitem__(self, i):
         return self.string[i]
+
+    def get_into(self, i, result):
+        _get_into(self.string, i, result)
+        alteration = self.alterations[i]
+        if alteration is not None:
+            apply_into = getattr(type(alteration), "apply_into", None)
+            if apply_into is not None:
+                apply_into(alteration, result, result)
+            else:
+                corrected = alteration(result)
+                channel = 0
+                while channel < len(result):
+                    result[channel] = corrected[channel]
+                    channel += 1
+        return result
 
     def fill(self, v):
         for i in range(self.n):
@@ -174,6 +223,18 @@ class DimCorrection:
             new_val.append(channel)
         return new_val
 
+    def apply_into(self, v, result):
+        amount_percent = self._amount_percent
+        index = 0
+        while index < len(v):
+            channel = v[index] * amount_percent // 100
+            if channel > 255:
+                channel = 255
+            if channel < 0:
+                channel = 0
+            result[index] = channel
+            index += 1
+
 
 class ColourCorrection:
     def __init__(self, amounts):
@@ -190,6 +251,17 @@ class ColourCorrection:
                 channel = 0
             new_val.append(channel)
         return new_val
+
+    def apply_into(self, v, result):
+        index = 0
+        while index < len(v) and index < len(self.amounts):
+            channel = int(v[index] * self.amounts[index])
+            if channel > 255:
+                channel = 255
+            if channel < 0:
+                channel = 0
+            result[index] = channel
+            index += 1
 
 
 class CallbackCorrection:
