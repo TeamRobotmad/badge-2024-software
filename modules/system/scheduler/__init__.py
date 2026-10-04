@@ -28,19 +28,30 @@ _APP_RENDER_PERF_TIMER = PerfTimer("")
 def _draw_app(ctx, app):
     if DEBUG_PERF:
         _APP_RENDER_PERF_TIMER.name = f"rendering {app}"
-
     with _APP_RENDER_PERF_TIMER:
         ctx.save()
-        try:
-            app.draw(ctx)
-        except Exception as error:
-            eventbus.emit(RequestStopAppEvent(app=app))
-            sys.print_exception(error, sys.stderr)
-            eventbus.emit(
-                ShowNotificationEvent(message=f"{app.__class__.__name__} has crashed")
-            )
-            eventbus.emit(EmoteNegativeEvent())
+        _draw_app_safely(ctx, app)
         ctx.restore()
+
+
+def _draw_app_safely(ctx, app):
+    try:
+        app.draw(ctx)
+    except Exception:
+        _handle_app_draw_error(app)
+
+
+def _handle_app_draw_error(app):
+    eventbus.emit(RequestStopAppEvent(app=app))
+    print("App draw failed")
+    _notify_app_draw_crash(app)
+    eventbus.emit(EmoteNegativeEvent())
+
+
+def _notify_app_draw_crash(app):
+    eventbus.emit(
+        ShowNotificationEvent(message=f"{app.__class__.__name__} has crashed")
+    )
 
 
 class _Scheduler:
