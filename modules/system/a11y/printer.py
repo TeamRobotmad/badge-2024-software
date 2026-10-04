@@ -5,6 +5,7 @@ class PrintA11y:
         self.collected = []
         self.last_strings = []
         self._last_strings_are_alts = False
+        self._collect_has_transients = False
         self.inhibit = False
         self.process = None
 
@@ -37,42 +38,63 @@ class PrintA11y:
     def get_deduped_strings(self):
         use_alts = bool(self.alts)
         strings = self.alts if use_alts else self.collected
-        if self._last_strings_are_alts == use_alts and self.last_strings == strings:
+        if self._strings_unchanged(strings, use_alts):
             return
+        return self._collect_changed_strings(strings, use_alts)
 
-        has_transients = False
-        if use_alts:
-            index = 0
-            while index < len(strings):
-                if strings[index][2]:
-                    has_transients = True
-                    break
-                index += 1
-        output_strings = []
-        index = 0
-        while index < len(strings):
-            if use_alts:
-                string, always, transient = strings[index]
-            else:
-                string = strings[index]
-                always = False
-                transient = False
-            if transient:
-                output_strings.append(string)
-            elif always:
-                output_strings.append(string)
-            elif not has_transients and len(self.last_strings) > index:
-                if self._last_strings_are_alts:
-                    previous_string = self.last_strings[index][0]
-                else:
-                    previous_string = self.last_strings[index]
-                if previous_string != string:
-                    output_strings.append(string)
-            index += 1
+    def _strings_unchanged(self, strings, use_alts):
+        return self._last_strings_are_alts == use_alts and self.last_strings == strings
 
+    def _collect_changed_strings(self, strings, use_alts):
+        self._collect_has_transients = self._has_transient_strings(strings, use_alts)
+        output_strings = self._collect_string_entries(strings)
         self.last_strings = strings[:]
         self._last_strings_are_alts = use_alts
         return output_strings
+
+    def _collect_string_entries(self, strings):
+        use_alts = strings is self.alts
+        output_strings = []
+        index = 0
+        while index < len(strings):
+            entry = self._string_entry(strings, use_alts, index)
+            if self._should_emit_string(entry, index, use_alts):
+                output_strings.append(entry[0] if use_alts else entry)
+            index += 1
+        return output_strings
+
+    def _should_emit_string(self, entry, index, use_alts):
+        if use_alts:
+            string, always, transient = entry
+            if transient or always:
+                return True
+        else:
+            string = entry
+        return (
+            not self._collect_has_transients
+            and len(self.last_strings) > index
+            and self._last_string_text(index) != string
+        )
+
+    def _has_transient_strings(self, strings, use_alts):
+        if not use_alts:
+            return False
+        index = 0
+        while index < len(strings):
+            if strings[index][2]:
+                return True
+            index += 1
+        return False
+
+    def _string_entry(self, strings, use_alts, index):
+        if use_alts:
+            return strings[index]
+        return strings[index]
+
+    def _last_string_text(self, index):
+        if self._last_strings_are_alts:
+            return self.last_strings[index][0]
+        return self.last_strings[index]
 
     async def finalise_frame(self):
         text = self.get_deduped_strings()
