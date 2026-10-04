@@ -1,5 +1,4 @@
-import asyncio
-
+from async_helpers import sleep_ms
 import display
 from events.input import Button, BUTTON_TYPES, ButtonDownEvent, ButtonUpEvent
 from events.joystick import JOYSTICK_BUTTON_TYPES
@@ -332,7 +331,7 @@ class TwentyTwentySix(FrontBoard):
                         await eventbus.emit_async(HexpansionRemovalEvent(port=i + 1))
             else:
                 if sim:
-                    for i, key in enumerate(TwentyTwentySix.button_states.keys()):
+                    for i, key in enumerate(TwentyTwentySix.button_states):
                         button_down = not _sim.buttons.state()[i]
                         if button_down and not TwentyTwentySix.button_states[key][0]:
                             await eventbus.emit_async(
@@ -344,7 +343,7 @@ class TwentyTwentySix(FrontBoard):
                             )
                         TwentyTwentySix.button_states[key][0] = button_down
                 else:
-                    for key in TwentyTwentySix.pin_assignment.keys():
+                    for key in TwentyTwentySix.pin_assignment:
                         if TwentyTwentySix.button_states[key][0]:
                             if (
                                 time.ticks_diff(
@@ -357,7 +356,7 @@ class TwentyTwentySix(FrontBoard):
                                 )
                                 TwentyTwentySix.button_states[key][1] = now
 
-                    for key in TwentyTwentySix.joystick_states.keys():
+                    for key in TwentyTwentySix.joystick_states:
                         if TwentyTwentySix.joystick_states[key][0]:
                             if (
                                 time.ticks_diff(
@@ -370,4 +369,4 @@ class TwentyTwentySix(FrontBoard):
                                 )
                                 TwentyTwentySix.joystick_states[key][1] = now
 
-            await asyncio.sleep(0.1)
+            await sleep_ms(100)
