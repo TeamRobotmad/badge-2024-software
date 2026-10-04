@@ -4,6 +4,19 @@ from system.notification.events import ShowNotificationEvent
 from system.eventbus import eventbus
 
 
+def _advance_notification(notification, delta):
+    try:
+        notification.update(delta)
+    except Exception:
+        _log_notification_update_failure()
+        return False
+    return True
+
+
+def _log_notification_update_failure():
+    print("Notification update failed")
+
+
 class NotificationService(app.App):
     def __init__(self):
         eventbus.on_async(
@@ -26,10 +39,7 @@ class NotificationService(app.App):
             if not notification._open and notification._animation_state == 0:
                 index += 1
                 continue
-            try:
-                notification.update(delta)
-            except Exception as error:
-                print(error)
+            if not _advance_notification(notification, delta):
                 index += 1
                 continue
             if notification._open or notification._animation_state != 0:
