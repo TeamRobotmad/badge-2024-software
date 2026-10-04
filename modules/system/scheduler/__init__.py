@@ -5,7 +5,7 @@ import time
 
 from async_helpers import sleep_ms
 from events.emote import EmoteNegativeEvent
-from system.a11y.events import ReplaceAccessibiltiyHandlerEvent
+from system.a11y.events import ReplaceAccessibilityHandlerEvent
 from perf_timer import DEBUG_PERF, PerfTimer
 from system.a11y import printer
 from system.eventbus import eventbus
@@ -83,7 +83,7 @@ class _Scheduler:
         )
 
         eventbus.on_async(
-            ReplaceAccessibiltiyHandlerEvent, self._handle_new_a11y_handler, self
+            ReplaceAccessibilityHandlerEvent, self._handle_new_a11y_handler, self
         )
         self.a11y_handler = printer._printa11y
 
