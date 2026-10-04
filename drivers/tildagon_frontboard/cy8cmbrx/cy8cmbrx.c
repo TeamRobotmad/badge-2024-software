@@ -27,7 +27,7 @@ cy8cmbrx_status_t cy8cmbrx_run( void )
     esp_err_t err = 0xFF;
     while( err != ESP_OK )
     {
-        err = tildagon_i2c_reg_read(TILDAGON_TOP_I2C_PORT, CY8CMBRX_ADDRESS, CY8CMBRX_BUTTON_STAT_ADR, raw_buf, 6); 
+        err = tildagon_i2c_reg_read(TILDAGON_TOP_I2C_PORT, CY8CMBRX_ADDRESS, CY8CMBRX_BUTTON_STAT_ADR, raw_buf, 6);
         static uint8_t count = 0U;
         count++;
         if ( count > 3 )

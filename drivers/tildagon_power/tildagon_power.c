@@ -659,7 +659,7 @@ void generate_events( void )
             }
             if ( !aw9523b_pin_get_input( &ext_pin[2], ls1 ) )
             {
-                cy8cmbrx_cb( NULL, ls1, GPIO_INTR_NEGEDGE ); 
+                cy8cmbrx_cb( NULL, ls1, GPIO_INTR_NEGEDGE );
             }
         }
     }
@@ -752,4 +752,3 @@ void clean_out( void )
         push_event(MP_POWER_EVENT_LANYARD_DETACH);
     }
 }
-

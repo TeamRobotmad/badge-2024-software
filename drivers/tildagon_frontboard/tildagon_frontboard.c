@@ -39,9 +39,9 @@ void tildagon_frontboard_init( uint16_t board_id )
     /* setup frontboard port expander */
     top_egpio.mux = tildagon_get_mux_obj( TILDAGON_TOP_I2C_PORT ),
     tildagon_pins_set_aux( top_egpio, 0 );
-    aw9523b_init( &ext_pin[3] );    
-    
-    aw9523b_pin_set_direction( &ext_pin[1], iox_int, true ); 
+    aw9523b_init( &ext_pin[3] );
+
+    aw9523b_pin_set_direction( &ext_pin[1], iox_int, true );
     aw9523b_irq_register( &ext_pin[1], iox_int, iox_cb);
     aw9523b_irq_enable( &ext_pin[1], iox_int );  
     
@@ -62,8 +62,8 @@ void tildagon_frontboard_init( uint16_t board_id )
     
     aw9523b_pin_set_direction( &ext_pin[2], ls1, true );
     aw9523b_irq_register( &ext_pin[2], ls1, cy8cmbrx_cb);
-    aw9523b_irq_enable( &ext_pin[2], ls1 );  
- 
+    aw9523b_irq_enable( &ext_pin[2], ls1 );
+
     /* reset flip flop */
     aw9523b_pin_set_output( &ext_pin[3], int_clear, false );
     aw9523b_pin_set_output( &ext_pin[3], int_clear, true );
@@ -113,4 +113,3 @@ void cy8cmbrx_cb( aw9523b_device_t *dev __attribute__((unused)),
         }
     }
 }
-
