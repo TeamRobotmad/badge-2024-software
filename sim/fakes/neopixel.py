@@ -78,7 +78,10 @@ class MergedNeoPixel:
         return _get_into(self.string, leds[0], result)
 
     def fill(self, v):
-        self.string.fill(v)
+        index = 0
+        while index < self.n:
+            self[index] = v
+            index += 1
 
     def write(self):
         self.string.write()
@@ -97,20 +100,19 @@ class ComposedNeoPixel:
         self.lengths.append(string.n)
 
     def __setitem__(self, i, v):
-        bad_indexes = []
-        for string_idx, (string, offset, length) in enumerate(
-            zip(self.strings, self.offsets, self.lengths)
-        ):
-            index = i - offset
+        string_idx = 0
+        while string_idx < len(self.strings):
+            index = i - self.offsets[string_idx]
+            length = self.lengths[string_idx]
             if index >= 0 and index < length:
-                try:
-                    string[index] = v
-                except:
-                    bad_indexes.append(string_idx)
-        for bad_idx in sorted(bad_indexes, reverse=True):
-            del self.strings[bad_idx]
-            del self.offsets[bad_idx]
-            del self.lengths[bad_idx]
+                self.strings[string_idx][index] = v
+            string_idx += 1
+
+    def set_many(self, start, values, count, values_start=0):
+        pixel = 0
+        while pixel < count:
+            self[start + pixel] = values[values_start + pixel]
+            pixel += 1
 
     def set_many(self, start, values, count, values_start=0):
         pixel = 0
@@ -133,8 +135,11 @@ class ComposedNeoPixel:
         raise KeyError("No such LED in this string")
 
     def fill(self, v):
-        for string in self.strings:
-            string.fill(v)
+        count = self.n
+        index = 0
+        while index < count:
+            self[index] = v
+            index += 1
 
     def write(self):
         for string in self.strings:
@@ -149,6 +154,7 @@ class CorrectedNeoPixel:
     def __init__(self, string, alterations):
         self.string = string
         self.alterations = alterations
+        self._correction_buffer = None
         self.n = string.n
 
     def __setitem__(self, i, v):
@@ -167,7 +173,28 @@ class CorrectedNeoPixel:
         return self.string[i]
 
     def get_into(self, i, result):
-        return _get_into(self.string, i, result)
+        _get_into(self.string, i, result)
+        alteration = self.alterations[i]
+        if alteration is None:
+            return result
+        apply_into = getattr(type(alteration), "apply_into", None)
+        if apply_into is None:
+            corrected = alteration(result)
+            channel = 0
+            while channel < len(result):
+                result[channel] = corrected[channel]
+                channel += 1
+            return result
+        buffer = self._correction_buffer
+        if buffer is None or len(buffer) != len(result):
+            buffer = [0] * len(result)
+            self._correction_buffer = buffer
+        apply_into(alteration, result, buffer)
+        channel = 0
+        while channel < len(result):
+            result[channel] = buffer[channel]
+            channel += 1
+        return result
 
     def fill(self, v):
         for i in range(self.n):
@@ -200,6 +227,8 @@ class DimCorrection:
         self._amount_percent = amount_percent
 
     def __call__(self, v):
+        if len(v) != len(self.amounts):
+            raise ValueError("colour and correction lengths must match")
         new_val = []
         amount_percent = self._amount_percent
         for channel in v:
@@ -241,8 +270,10 @@ class ColourCorrection:
         return new_val
 
     def apply_into(self, v, result):
+        if len(v) != len(self.amounts):
+            raise ValueError("colour and correction lengths must match")
         index = 0
-        while index < len(v) and index < len(self.amounts):
+        while index < len(v):
             channel = int(v[index] * self.amounts[index])
             if channel > 255:
                 channel = 255

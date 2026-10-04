@@ -1,12 +1,11 @@
 diff --git a/micropython/drivers/led/neopixel/neopixel.py b/micropython/drivers/led/neopixel/neopixel.py
-index caa12dc..c4c5009 100644
+index caa12dc..a46a099 100644
 --- a/micropython/drivers/led/neopixel/neopixel.py
 +++ b/micropython/drivers/led/neopixel/neopixel.py
 @@ -30,10 +30,32 @@ class NeoPixel:
          for i in range(self.bpp):
              self.buf[offset + self.ORDER[i]] = v[i]
--
-+
+ 
 +    def set_many(self, start, values, count, values_start=0):
 +        while count > 0:
 +            self._set_many_pixel(start, values[values_start])
@@ -24,8 +23,7 @@ index caa12dc..c4c5009 100644
      def __getitem__(self, i):
          offset = i * self.bpp
          return tuple(self.buf[offset + self.ORDER[i]] for i in range(self.bpp))
--
-+
+ 
 +    def get_into(self, i, result):
 +        offset = i * self.bpp
 +        channel = 0
@@ -37,7 +35,7 @@ index caa12dc..c4c5009 100644
      def fill(self, v):
          b = self.buf
          l = len(self.buf)
-@@ -48,3 +70,384 @@ class NeoPixel:
+@@ -48,3 +70,404 @@ class NeoPixel:
      def write(self):
          # BITSTREAM_TYPE_HIGH_LOW = 0
          bitstream(self.pin, 0, self.timing, self.buf)
@@ -92,7 +90,10 @@ index caa12dc..c4c5009 100644
 +        return self.n
 +
 +    def fill(self, v):
-+        self.string.fill(v)
++        index = 0
++        while index < self.n:
++            self[index] = v
++            index += 1
 +
 +    def write(self):
 +        self.string.write()
@@ -123,13 +124,7 @@ index caa12dc..c4c5009 100644
 +        while string_idx < len(self.strings):
 +            index = i - self.offsets[string_idx]
 +            if index >= 0 and index < self.lengths[string_idx]:
-+                try:
-+                    self.strings[string_idx][index] = v
-+                except:
-+                    del self.strings[string_idx]
-+                    del self.offsets[string_idx]
-+                    del self.lengths[string_idx]
-+                    continue
++                self.strings[string_idx][index] = v
 +            string_idx += 1
 +
 +    def set_many(self, start, values, count, values_start=0):
@@ -213,8 +208,11 @@ index caa12dc..c4c5009 100644
 +        return self.n
 +
 +    def fill(self, v):
-+        for string in self.strings:
-+            string.fill(v)
++        count = self.n
++        index = 0
++        while index < count:
++            self[index] = v
++            index += 1
 +
 +    def write(self):
 +        for string in self.strings:
@@ -326,6 +324,22 @@ index caa12dc..c4c5009 100644
 +                channel += 1
 +        else:
 +            read_into(self.string, i, result)
++        alteration = self.alterations[i]
++        if alteration is not None:
++            apply_into = self._apply_into[i]
++            if apply_into is not None:
++                buffer = self._correction_buffer
++                if buffer is None or len(buffer) != len(result):
++                    buffer = [0] * len(result)
++                    self._correction_buffer = buffer
++                apply_into(alteration, result, buffer)
++                self._copy_channels(buffer, result)
++            else:
++                corrected = alteration(result)
++                channel = 0
++                while channel < len(result):
++                    result[channel] = corrected[channel]
++                    channel += 1
 +        return result
 +
 +    def __len__(self):
@@ -391,6 +405,8 @@ index caa12dc..c4c5009 100644
 +        self.amounts = amounts
 +
 +    def __call__(self, v):
++        if len(v) != len(self.amounts):
++            raise ValueError("colour and correction lengths must match")
 +        new_val = []
 +        for channel, amount in zip(v, self.amounts):
 +            channel *= amount
@@ -404,8 +420,10 @@ index caa12dc..c4c5009 100644
 +
 +    def apply_into(self, v, result):
 +        amounts = self.amounts
++        if len(v) != len(amounts):
++            raise ValueError("colour and correction lengths must match")
 +        index = 0
-+        while index < len(v) and index < len(amounts):
++        while index < len(v):
 +            channel = int(v[index] * amounts[index])
 +            if channel > 255:
 +                channel = 255
