@@ -104,17 +104,106 @@ retain the Xtensa `mpy-cross` check when changing them.
 
 ## Open follow-ups
 
+The probe's Python-allocation label is the currently executing bytecode frame
+when the object header is allocated, not necessarily the function that defines
+the generator. The MicroPython probe records `gc_alloc_diag_code_state` in
+`mp_obj_fun_bc_alloc_diag_record_current`; generator-wrapper allocation occurs
+at the call site. Inspection of the following await expressions explains the
+reported counts:
+
+- Each `_render_task` iteration awaits `render_needed.wait()` and, when the
+  default accessibility handler is installed, `ctx.a11y.finalise_frame()`.
+  Both produce a generator object. The measured 842 is exactly two per 421
+  render iterations. `PrintA11y.finalise_frame` contains no internal await,
+  but is still declared `async`.
+- Each base `App.run` update cycle awaits the scheduler-provided
+  `render_update` callback, which is the async `mark_update_finished` closure.
+  That creates one generator per cycle, matching the 421 reported allocations.
+- `asyncio.sleep_ms` returns its module-level `SingletonGenerator`; the awaits
+  of `sleep_ms(0)` and `sleep_ms(50)` do not create a new generator each cycle.
+
+Thus the source attribution is high confidence for this menu-idle workload;
+the counts are per GC interval, not time-normalized rates.
+
+The a11y helper methods are used by firmware UI components: menus, dialogs,
+notifications, and layout use `ctx.a11y` to add/collect accessible text or
+suppress it. This is active in-repository use of the text-collection API, not
+evidence of an external consumer of an asynchronous finalizer. The only
+in-repository replacement-handler caller found is BadgeBot in the simulator,
+which suppresses/restores the default handler; its async-finalizer assertions
+and fake async handler are tests introduced during our work, not upstream
+interface requirements. The `A11yImplementation` stub methods are synchronous
+and it does not define `finalise_frame`.
+
+Given that evidence, the bounded F1 candidate is to make the built-in
+`PrintA11y.finalise_frame` synchronous and call it synchronously from the
+scheduler, then remove/update the BadgeBot tests that asserted async behavior.
+This preserves the active add-alt/text collection behavior while removing one
+generator per render. Confirm compatibility with any external/custom handlers
+before changing the replacement-handler protocol. The `Event.wait()` generator
+is intrinsic to the current event-wait API and must not be replaced with a
+busy poll. F2 is more invasive because the async callback both signals
+rendering, delays briefly, and waits for foreground focus; eliminating its
+per-update generator needs a deliberate App/scheduler protocol change, not a
+mechanical coroutine-to-function conversion.
+
 | ID | Observation | Why deferred | Next evidence needed | Status |
 |---|---|---|---|---|
-| F1 | Generator allocations attributed to `_render_task`: 842 / 45,468 B per GC interval, repeated in all three menu-idle intervals. Likely from `render_needed.wait()` and async accessibility finalization. | These awaits perform synchronization; changing `finalise_frame` to synchronous would break its tested API contract. | Profile generator call sites before considering an awaitable/API redesign. | Open; confirmed recurring |
-| F2 | Generator allocations attributed to `app.run`: 421 / 23,576 B per GC interval, repeated in all three menu-idle intervals. Likely the `mark_update_finished` coroutine callback. | It delays rendering and waits for foreground focus; changing it could alter scheduling behavior. | Confirm attribution with a call-site probe and measure a semantics-preserving alternative. | Open; confirmed recurring |
+| F1 | 842 generator allocations / 45,468 B per GC interval in `_render_task`, repeated in all three menu-idle intervals. | One render pass awaits `render_needed.wait()` and `ctx.a11y.finalise_frame()`; both calls construct a generator. The `sleep_ms(0)` await uses a reusable singleton and is not the source. | Consider making `PrintA11y.finalise_frame` synchronous and calling it synchronously from the scheduler: it has no internal awaits, and the only in-repo async-interface requirements found are our BadgeBot tests. Keep Event.wait synchronization unless a safe reusable waiter is designed. | Open; call sites traced; API reconsidered |
+| F2 | 421 generator allocations / 23,576 B per GC interval in `app.run`, repeated in all three menu-idle intervals. | Each `await render_update()` calls the scheduler's async `mark_update_finished` closure, constructing one generator. `sleep_ms(50)` uses the reusable singleton. | Any reduction requires changing the App.run/render-update handshake, used by multiple app overrides; design and measure before changing the API. | Open; call site traced |
 | F3 | `mp_ctx_from_ctx` allocates a context wrapper for `display.get_ctx()`. | Reusing the wrapper could affect identity, retained references, or the per-frame `a11y` field. | Check callers and identity/lifetime expectations, then measure wrapper allocations. | Open |
 | F4 | The menu's initial focused-font-size calculation and its exception-only diagnostic frame exceed 44 B. | They are cold paths rather than recurring idle-frame churn. | Revisit only if startup/menu-open probe intervals show material churn. | Open |
-| F5 | Search found 15 firmware-executable `asyncio.sleep()` calls with decimal-literal delays, plus one simulator-only occurrence. | Not all are idle paths; some run only in app-specific, retry, or threaded helper flows. | Candidate locations and durations are listed below; convert deliberate delays to `sleep_ms` and test timing/API behavior. | Search complete; replacements not applied |
-| F6 | `system.espnow.service._apply_power_management`: baseline 2 / 200 B; new result 3 / 300 B per GC interval in all three reports. | Low volume beside F1/F2, but it is confirmed recurring. The Wi-Fi log also shows the setting being applied about every 10 seconds. | Verify whether the periodic loop can skip unchanged settings without breaking setup/reset behavior. | Deferred; confirmed recurring |
-| F7 | `system.espnow.service._has_listeners`: 3 / 240 B in frames, 6 dict views / 72 B, and 3 tuples / 48 B per GC interval, repeated in all three reports. | Lower volume than F1/F2 but confirmed recurring. | Consider simplifying registry traversal, then verify with another three-interval probe. | Open |
+| F5 | Search found 15 firmware-executable `asyncio.sleep()` calls with decimal-literal delays, plus one simulator-only occurrence. | Not all are idle paths; some run only in app-specific, retry, or threaded helper flows. | Six sites converted to `sleep_ms`; eight sites excluded per request; `patterninhibit.py` deferred for async-design review. | Selected replacements complete |
+| F6 | `system.espnow.service._apply_power_management`: 3 / 300 B of frame allocation per GC interval in all three reports; Wi-Fi logs show configuration about every 10 seconds. | Low volume. The method intentionally retries `sta.config(pm=pm)` while the driver initializes and reasserts the setting in its reconciliation loop; `_radio_awake` only suppresses duplicate status messages. Skipping unchanged settings could lose recovery after a Wi-Fi state reset. | Keep reassertion unless reset/configuration lifecycle is established; frame reduction via a retry-helper split is possible but low priority. | Deferred; recurring, behavior-sensitive |
+| F7 | `system.espnow.service._has_listeners`: 3 / 240 B of frame allocation, 6 dict views / 72 B, and 3 tuples / 48 B per GC interval, repeated in all three reports. | Avoidable: each call constructed one tuple of the two registries and two `dict.values()` views. | Iterate each registry directly through `_registry_has_listeners`; preserve lookup semantics. | Implemented; helper frames 12 B / 36 B; on-device probe pending |
 | F8 | Three `GC_ALLOC_SITE` caller addresses are not yet symbolicated. | Caller totals may overlap frame/Python allocator instrumentation and must not be summed. | Resolve against the exact firmware ELF/map and correlate with allocation-kind records. | Open |
 | F9 | Wi-Fi power mode is configured about every 10 seconds while idle. | The repeated `Set ps type` log and `_apply_power_management` count suggest redundant periodic work, but the exact cause is not proven. | Confirm `service.py` call path and test whether unchanged PM values can safely be skipped. | Open |
+| F10 | `PatternInhibit._make_red` contains `await` in a synchronous method, and both call sites are synchronous. | CPython rejects the file; MicroPython compiles `_make_red` as a generator, but the callers discard the unstarted generator. Thus the 500 ms wait and LED writes do not execute. | No action planned on this playground; this is outside the requested scope and left for the upstream maintainers. | Intentionally out of scope per user (2026-10-05) |
+
+### PatternInhibit findings (reference only; no playground work planned)
+
+In [patterninhibit.py](../../modules/firmware_apps/patterninhibit.py),
+`_make_red` is declared with `def`, not `async def`. Pylance reports
+`"await" allowed only within async function`, and CPython `py_compile` raises
+`SyntaxError: 'await' outside async function`. The branch-matched MicroPython
+compiler does accept it, but `mpy-tool.py -d` shows `_make_red` has a
+`YIELD_FROM` instruction and generator prelude. Both synchronous call sites
+call it and discard its return value, so the generator is never advanced:
+neither its 500 ms sleep nor its red LED writes run. This behavior is confirmed
+by compiler output; actual on-device LED behavior has not been separately
+probed.
+
+Upstream checks on 2026-10-05:
+
+- Upstream `main` contains the same `PatternInhibit` implementation.
+- [Issue #234](https://github.com/emfcamp/badge-2024-software/issues/234)
+  remains open and reports patterns not restarting after apps that disable
+  them are minimized. This app emits `PatternDisable` but its cancel path calls
+  `App.minimise()`, which only pops the foreground app; it does not emit
+  `PatternEnable`.
+- [PR #228](https://github.com/emfcamp/badge-2024-software/pull/228) is merged,
+  but its fix is specific to the OTA app's own `minimise` override; it does not
+  change the generic `App.minimise` behavior used here.
+- [PR #392](https://github.com/emfcamp/badge-2024-software/pull/392) is merged
+  and makes the back-LED manager obey `PatternEnable`/`PatternDisable`. It does
+  not fix this app's unstarted generator or restore the pattern on minimize.
+- [PR #308](https://github.com/emfcamp/badge-2024-software/pull/308) is an open
+  draft proposing per-LED pattern overrides. It is a different approach to
+  controlling LEDs while patterns run, not a fix for this app's lifecycle.
+
+For context, do not add `time.sleep_ms(500)`. A blocking sleep in the
+constructor or synchronous `update` would stall the single-threaded asyncio
+loop, delaying event handling, input, rendering, and pattern updates for half a
+second. Simply changing `_make_red` to `async def` is also insufficient:
+`__init__` and `update` cannot await it, and merely calling an async function
+does not run it. If retaining the delay, schedule it as a task with
+`asyncio.create_task`, and cancel or guard it when the state changes so an old
+delayed task cannot repaint LEDs after re-enabling the pattern. A tick-deadline
+state machine in the existing synchronous update path is an even simpler
+nonblocking alternative for this one-shot delay and avoids a task/generator
+allocation. Whichever design the upstream maintainers choose, they should
+handle minimize/termination so the pattern is re-enabled when this app gives up
+LED control; that lifecycle issue is independent of the 500 ms delay.
 
 ### Float sleep replacement candidates
 
@@ -127,16 +216,16 @@ so device-side float-allocation benefits do not apply to that fallback.
 The firmware-side search found 15 decimal-delay `asyncio.sleep()` call sites.
 These are candidates, not claims of observed idle churn:
 
-| File | Firmware call sites | Delay | Notes |
+| File | Firmware call sites | Delay | Status / notes |
 |---|---:|---:|---|
-| [async_helpers.py](../../modules/async_helpers.py) | 1 | 100 ms | `unblock` periodic callback. Its `Message.wait` call at line 30 is in the CPython-only simulator implementation and is not a device candidate. |
-| [dialog.py](../../modules/app_components/dialog.py) | 2 | 50 ms | Dialog polling/wait paths. |
-| [twentyfour.py](../../modules/frontboards/twentyfour.py) | 1 | 100 ms | Frontboard background loop; analogous to the converted TwentyTwentySix loop. |
-| [hexpansionfw.py](../../modules/firmware_apps/hexpansionfw.py) | 6 | 100 ms | Firmware-app waits and polling paths. |
-| [patterninhibit.py](../../modules/firmware_apps/patterninhibit.py) | 1 | 500 ms | Pattern timing loop. |
-| [tick_app.py](../../modules/firmware_apps/tick_app.py) | 1 | 100 ms | Firmware-app polling loop. |
-| [app.py](../../modules/system/hexpansion/app.py) | 1 | 100 ms | EEPROM detection retry. |
-| [app.py](../../modules/system/backleds/app.py) | 2 | 50 ms | Back-LED update loops. |
+| [async_helpers.py](../../modules/async_helpers.py) | 1 | 100 ms | Excluded per request. Its `Message.wait` call at line 30 is CPython-only simulator code. |
+| [dialog.py](../../modules/app_components/dialog.py) | 2 | 50 ms | Converted to `sleep_ms(50)`. |
+| [twentyfour.py](../../modules/frontboards/twentyfour.py) | 1 | 100 ms | Converted to `sleep_ms(100)`; analogous to the converted TwentyTwentySix loop. |
+| [hexpansionfw.py](../../modules/firmware_apps/hexpansionfw.py) | 6 | 100 ms | Excluded per request. |
+| [patterninhibit.py](../../modules/firmware_apps/patterninhibit.py) | 1 | 500 ms | Deferred: `_make_red` is synchronous despite containing `await`, and both callers are synchronous. Review upstream issues/PRs before deciding how to correct its async behavior. |
+| [tick_app.py](../../modules/firmware_apps/tick_app.py) | 1 | 100 ms | Excluded per request. |
+| [app.py](../../modules/system/hexpansion/app.py) | 1 | 100 ms | Converted to `sleep_ms(100)`. |
+| [app.py](../../modules/system/backleds/app.py) | 2 | 50 ms | Converted to `sleep_ms(50)`. |
 
 The search also found integer-delay `asyncio.sleep()` calls and zero-delay
 cooperative yields; those are not decimal-float candidates and are not listed
@@ -154,6 +243,12 @@ simulator code are not asyncio sleep sites.
   handling. The simulator's patched `os.stat` needed a temporary test-process
   compatibility wrapper; no repository test files were changed.
 - **Ruff:** both configured hooks passed on the edited `modules/` files.
+- **Float-sleep replacements:** pre-commit passed on the four changed modules;
+  branch-matched `mpy-cross -march=xtensawin -O2` compiled all four.
+- **ESP-NOW listener lookup:** pre-commit passed; branch-matched bytecode
+  measured `_has_listeners` at 12 B and `_registry_has_listeners` at 36 B.
+  Five focused registry-behavior checks passed. Post-change device probe is
+  pending.
 - **ESP32-S3 firmware build:** passed after formatting. `micropython.bin` was
   `0x2311f0` bytes,
   leaving 10% of the smallest app partition free.
