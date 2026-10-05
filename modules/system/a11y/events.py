@@ -11,3 +11,6 @@ class ReplaceAccessibilityHandlerEvent(AccessibilityEvent):
 
     def __str__(self):
         return f"Replace a11y handler: {self.klass}"
+
+
+ReplaceAccessibiltiyHandlerEvent = ReplaceAccessibilityHandlerEvent
