@@ -1,4 +1,4 @@
-import asyncio
+from async_helpers import sleep_ms
 
 import display
 from events.input import Button, BUTTON_TYPES, ButtonDownEvent, ButtonUpEvent
@@ -161,4 +161,4 @@ class TwentyTwentyFour(FrontBoard):
                                 )
                             else:
                                 TwentyTwentyFour.button_states[key][1] += 1
-            await asyncio.sleep(0.1)
+            await sleep_ms(100)

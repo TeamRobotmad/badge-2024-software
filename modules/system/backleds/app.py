@@ -1,4 +1,5 @@
 import asyncio
+from async_helpers import sleep_ms
 import settings
 
 from app import App
@@ -49,7 +50,7 @@ class BackLEDManager(App):
                 for lednum in range(13, 19):
                     tildagonos.leds[lednum] = (0, brightness, 0)
                 tildagonos.leds.write()
-                await asyncio.sleep(0.05)
+                await sleep_ms(50)
         finally:
             self.lock.release()
 
@@ -66,7 +67,7 @@ class BackLEDManager(App):
                 for lednum in range(13, 19):
                     tildagonos.leds[lednum] = (brightness, 0, 0)
                 tildagonos.leds.write()
-                await asyncio.sleep(0.05)
+                await sleep_ms(50)
         finally:
             self.lock.release()
 

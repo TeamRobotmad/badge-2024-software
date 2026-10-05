@@ -1,6 +1,6 @@
-import asyncio
 import math
 
+from async_helpers import sleep_ms
 import display
 from events.input import BUTTON_TYPES, ButtonDownEvent
 from frontboards.common import FRONTBOARD_BUTTON_TYPES
@@ -47,7 +47,7 @@ class YesNoDialog:
 
         # Tightly loop, waiting for a result, then return it
         while self._result is None:
-            await asyncio.sleep(0.05)
+            await sleep_ms(50)
         self.app.overlays.pop()
         await render_update()
         return self._result
@@ -119,7 +119,7 @@ class ProgressDialog:
         # Tightly loop, waiting for a result, then return it
         while self.result is None:
             await render_update()
-            await asyncio.sleep(0.05)
+            await sleep_ms(50)
         self.app.overlays.pop()
         await render_update()
         return self.result
