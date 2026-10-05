@@ -11,6 +11,10 @@
     {
       "name": "HexManager",
       "path": "sim/apps/HexManager"
+    },
+    {
+      "name": "display_manager",
+      "path": "sim/apps/display_manager"
     }
   ]
 }
