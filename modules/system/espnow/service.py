@@ -20,6 +20,13 @@ EspNowHandler = Callable[[EspNowReceiveEvent], Any]
 EspNowPredicate = Callable[[EspNowReceiveEvent], bool]
 
 
+def _registry_has_listeners(registry) -> bool:
+    for app in registry:
+        if registry[app].get(EspNowReceiveEvent):
+            return True
+    return False
+
+
 class EspNowService(App):
     """Single owner of the ESP-NOW radio.
 
@@ -63,11 +70,9 @@ class EspNowService(App):
 
     def _has_listeners(self) -> bool:
         # Check the eventbus to see if we have anyone listening for esp-now messages
-        for registry in (eventbus.async_handlers, eventbus.handlers):
-            for app_handlers in registry.values():
-                if app_handlers.get(EspNowReceiveEvent):
-                    return True
-        return False
+        return _registry_has_listeners(
+            eventbus.async_handlers
+        ) or _registry_has_listeners(eventbus.handlers)
 
     def _apply_power_management(self) -> None:
         # WiFi's default PM_PERFORMANCE sleeps the radio and drops esp-now messages.
